@@ -1,0 +1,8 @@
+.vscode
+*.gb
+*.gbc
+*.sav
+*.rtc
+*.exe
+*.stackdump
+*.o
