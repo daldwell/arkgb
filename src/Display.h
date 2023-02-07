@@ -4,27 +4,6 @@
 
 #pragma once
 
-class DisplayComponent : GComponent
-{
-    public:
-        DisplayComponent() {};
-        ~DisplayComponent() {};
-        void PokeByte(word, byte);
-        byte PeekByte(word);
-        void PokeWord(word, word);
-        word PeekWord(word);
-        void Cycle();
-        void Reset();
-    protected:
-        bool MemoryMapped(word);
-        int GetColorFromPalette(int);
-        void DrawTileRow(byte, int, int, byte, byte, word);
-        void DrawSpritesRow(byte);
-        void DrawBackgroundRow(byte);
-        void DrawWindowRow(byte);
-        friend class MmuComponent;
-};
-
 struct LcdRegister
 {
     byte LCDC;
@@ -49,7 +28,33 @@ struct Sprite
     byte attr;
 };
 
+struct Pixel
+{
+    byte r;
+    byte g;
+    byte b;
+};
 
+class DisplayComponent : GComponent
+{
+    public:
+        DisplayComponent() {};
+        ~DisplayComponent() {};
+        void PokeByte(word, byte);
+        byte PeekByte(word);
+        void PokeWord(word, word);
+        word PeekWord(word);
+        void Cycle();
+        void Reset();
+    protected:
+        bool MemoryMapped(word);
+        int GetColorFromPalette(Pixel);
+        void DrawTileRow(byte, int, int, byte, byte, word, byte);
+        void DrawSpritesRow(byte);
+        void DrawBackgroundRow(byte);
+        void DrawWindowRow(byte);
+        friend class MmuComponent;
+};
 
 extern int displayCycles;
 

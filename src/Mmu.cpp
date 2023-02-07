@@ -18,6 +18,7 @@ byte rom[0x4000];
 byte rom_bnk[0xFF][0x4000];
 byte rom_bnk_no;
 byte vram[1][0x2000]; 
+byte vram_bnk_no;
 byte ram[0x4][0x2000]; 
 byte ram_bnk_no;
 byte wram[0x2000]; 
@@ -198,7 +199,7 @@ byte * memoryMap(word addr)
         // TODO: vram banks
         case 0x8000:
         case 0x9000:
-            return &vram[0][addr&0x1FFF];
+            return &vram[vram_bnk_no][addr&0x1FFF];
         // Cart ram
         case 0xA000:
         case 0xB000:

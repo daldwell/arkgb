@@ -102,17 +102,19 @@ void Window::EventDispatch()
 void Window::ClearSurface()
 {
     //Fill the surface white
-    SDL_FillRect( surface, NULL, SDL_MapRGB( screen->format, 0xFF, 0xFF, 0xFF ) );
+    SDL_FillRect( surface, NULL, SDL_MapRGB( surface->format, 0xFF, 0xFF, 0xFF ) );
 }
 
-int Window::GetRGB(int r, int g, int b) {
+int Window::GetRGB(byte r, byte g, byte b) {
     return SDL_MapRGB( surface->format, r, g, b );
 }
 
 void Window::DrawPixel(int x, int y, int c)
 {
     SDL_LockSurface(surface);
-    SDL_memset(surface->pixels + ((x+CANVAS_XOFFSET)*sizeof(int)) + ((y+CANVAS_YOFFSET) * surface->pitch), c, sizeof(int));
+    Uint32 *buffer = (Uint32*) surface->pixels;
+    buffer[((x+CANVAS_XOFFSET)) + ((y+CANVAS_YOFFSET) * surface->w)] = c;
+    //SDL_memset(surface->pixels + ((x+CANVAS_XOFFSET)*sizeof(int)) + ((y+CANVAS_YOFFSET) * surface->pitch), c, sizeof(int));
     SDL_UnlockSurface(surface);
 }
 

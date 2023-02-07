@@ -25,6 +25,7 @@ extern byte rom[0x4000];
 extern byte rom_bnk[0xFF][0x4000];
 extern byte rom_bnk_no;
 extern byte vram[1][0x2000]; 
+extern byte vram_bnk_no;
 extern byte ram[0x4][0x2000]; 
 extern byte wram[0x2000]; 
 extern byte hram[0x100]; 
