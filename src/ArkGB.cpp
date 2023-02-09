@@ -20,12 +20,12 @@ int main(int argv, char** args)
     //executeTests();
 
     loadRom(args[1]);
-    cpuReset();
+    GUReset();
     initDebugger();
     cpuRunning = true;
     while (gwindow.running) {
         if (cpuRunning) {
-            cpuCycle();
+            GUCycle();
         } 
     }
     

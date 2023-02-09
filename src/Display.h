@@ -35,7 +35,7 @@ struct Pixel
     byte b;
 };
 
-class DisplayComponent : GComponent
+class DisplayComponent : public GComponent
 {
     public:
         DisplayComponent() {};

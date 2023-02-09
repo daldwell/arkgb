@@ -8,7 +8,6 @@ struct RomHeader
     byte logo[0x30];
     char title[0x10];
     // byte manufactureCode[4]; This is not used and the bytes can be allocated to the title 
-    // byte CGBflag; TODO: handle this when ArkGB supports CGB 
     word newLicensee;
     byte SGBflag;
     byte cartType;

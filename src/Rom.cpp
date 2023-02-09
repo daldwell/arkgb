@@ -8,6 +8,7 @@
 #include "Logger.h"
 #include "Misc.h"
 #include "Window.h"
+#include "GUnit.h"
 
 char romName[100];
 char ramName[100];
@@ -206,6 +207,12 @@ void loadRom(const char * rmt)
     // Set window title to ROM title
     sprintf(buf, "ArkGB - %s", romHeader->title);
     gwindow.SetTitle(buf);
+
+    // Set GBC profile if cart is compatible
+    byte gbcFlag = romHeader->title[0xF];
+    if (gbcFlag == 0x80 || gbcFlag == 0xC0) {
+        GUProfile(CGB);
+    }
 }
 
 void closeRom()

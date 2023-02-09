@@ -3,7 +3,7 @@
 
 #pragma once
 
-class MmuComponent : GComponent
+class MmuComponent : public GComponent
 {
     public:
         MmuComponent() {};

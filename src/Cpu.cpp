@@ -7,23 +7,32 @@
 #include "audio.h"
 #include "GUnit.h"
 
-
 int cpuCycles;
 bool cpuRunning;
 bool halt;
+bool doubleSpeed;
 
-// TODO: move to the GComponent class pattern
-void cpuCycle()
+void CpuComponent::PokeByte(word, byte)
 {
-    cpuCycles = 0;
-    interrupt.Cycle();
-    instTbl[mmu.PeekByte(regs.PC)].step();
-    timer.Cycle();
-    display.Cycle();
-    audio.Cycle();
+    // not implemented
 }
 
-void cpuReset()
+byte CpuComponent::PeekByte(word)
+{
+    // not implemented
+}
+
+bool CpuComponent::MemoryMapped(word)
+{
+    // not implemented
+}
+
+void CpuComponent::Cycle()
+{
+    instTbl[mmu.PeekByte(regs.PC)].step();
+}
+
+void CpuComponent::Reset()
 {
     cpuCycles = 0;
     displayCycles = 200;
@@ -33,6 +42,11 @@ void cpuReset()
 
     // Registers
     regs.AF = 0x0100;
+
+    if (profile == CGB) {
+        regs.AF = 0x1100;
+    }
+
     regs.BC = 0x0013;
     regs.DE = 0x00D8;
     regs.HL = 0x014D;

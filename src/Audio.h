@@ -108,7 +108,7 @@ class NoiseChannel : AChannel
         friend class AudioComponent;
 };
 
-class AudioComponent : GComponent
+class AudioComponent : public GComponent
 {
     public:
         AudioComponent();

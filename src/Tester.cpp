@@ -24,7 +24,7 @@ void beforeEach()
 {
     errorBuffer[0] = '\0';
     //displayReset();
-    cpuReset();
+    GUReset();
     regs.PC = 0;
 }
 

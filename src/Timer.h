@@ -3,7 +3,7 @@
 
 #pragma once
 
-class TimerComponent : GComponent
+class TimerComponent : public GComponent
 {
     public:
         TimerComponent() {};

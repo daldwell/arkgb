@@ -38,8 +38,6 @@ const int OAM_Y_FLIP = 1<<6;
 const int OAM_X_FLIP = 1<<5;
 const int OAM_PALETTE = 1<<4;
 
-bool cgbProfile = false;
-
 Sprite oamTable[40];
 struct LcdRegister lcdRegs;
 int displayCycles;
@@ -177,9 +175,10 @@ void DisplayComponent::DrawTileRow(byte tIdx, int x, int y, byte tileYOffset, by
     byte palIndex;
     word palData;
     word bp = 0x8000 + bpOffset;
+    bool cgbProfile = (profile == CGB);
 
     // CGB requires a bank switch for the correct tile data
-    byte sprBnk = cgbProfile ? (tAttr & 0x8) : 0; 
+    byte sprBnk = (cgbProfile) ? (tAttr & 0x8) : 0; 
     mmu.PokeByte(0xFF4F, sprBnk);
 
     tileRow = mmu.PeekWord(bp + tileYOffset + (tIdx*tileIndex));
@@ -225,6 +224,7 @@ void DisplayComponent::DrawSpritesRow(byte y)
     byte palIndex;
     word palData;
     byte tileSize = (lcdRegs.LCDC&LCDC_SPRITE_SIZE_MASK) ? 15 : 7;
+    bool cgbProfile = (profile == CGB);
 
     // For the sprite buffer we use two masking values:
     // 0xFF means no pixel is occupied at all by a sprite

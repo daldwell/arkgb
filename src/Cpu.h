@@ -1,6 +1,21 @@
 #include "Typedefs.h"
+#include "GComponent.h"
 
 #pragma once
+
+class CpuComponent : public GComponent
+{
+    public:
+        CpuComponent() {};
+        ~CpuComponent() {};
+        void PokeByte(word, byte);
+        byte PeekByte(word);
+        void Cycle();
+        void Reset();
+    protected:
+        bool MemoryMapped(word);
+        friend class MmuComponent;
+};
 
 struct Registers
 {
@@ -64,10 +79,6 @@ extern int cpuCycles;
 extern bool cpuRunning;
 extern bool halt;
 
-void cpuStart();
-void cpuStop();
-void cpuCycle();
-void cpuReset();
 void setFlag(Flags, bool);
 bool getFlag(Flags);
 
