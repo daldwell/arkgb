@@ -38,7 +38,7 @@ const int OAM_Y_FLIP = 1<<6;
 const int OAM_X_FLIP = 1<<5;
 const int OAM_PALETTE = 1<<4;
 
-bool cgbProfile = true;
+bool cgbProfile = false;
 
 Sprite oamTable[40];
 struct LcdRegister lcdRegs;
@@ -56,15 +56,16 @@ Pixel dmgPal[4] = {
     {0x00, 0x00, 0x00}
 };
 
+const int palSize = 64;
 // CGB background palette byte array
 bool cgbBGIncrement;
 byte cgbBGIndex;
-byte cgbBGPal[64];
+byte cgbBGPal[palSize];
 
 // CGB sprite palette byte array
 bool cgbOAMIncrement;
 byte cgbOAMIndex;
-byte cgbOAMPal[64];
+byte cgbOAMPal[palSize];
 
 byte DisplayComponent::PeekByte(word addr) 
 {
@@ -94,6 +95,11 @@ byte DisplayComponent::PeekByte(word addr)
     // CGB sprite color palette read
     if (addr == 0xFF6B) {
         return cgbOAMPal[cgbOAMIndex];
+    }
+
+    // VRam
+    if (addr >= 0x8000 && addr <= 0x9FFF) {
+        return vram[vram_bnk_no][addr&0x1FFF];
     }
 
     // Get VRAM bank
@@ -135,9 +141,15 @@ void DisplayComponent::PokeByte(word addr, byte value)
         return;
     }
 
+    // VRam
+    if (addr >= 0x8000 && addr <= 0x9FFF) {
+        vram[vram_bnk_no][addr&0x1FFF] = value;
+        return;
+    }
+
     // Set VRAM bank
     if (addr == 0xFF4F) {
-        vram_bnk_no = value & 0x1;
+        vram_bnk_no = (value & 0x1);
         return;
     }
 
@@ -167,9 +179,8 @@ void DisplayComponent::DrawTileRow(byte tIdx, int x, int y, byte tileYOffset, by
     word bp = 0x8000 + bpOffset;
 
     // CGB requires a bank switch for the correct tile data
-    if (cgbProfile) {
-        mmu.PokeByte(0xFF4F, tAttr & 0x8);
-    }
+    byte sprBnk = cgbProfile ? (tAttr & 0x8) : 0; 
+    mmu.PokeByte(0xFF4F, sprBnk);
 
     tileRow = mmu.PeekWord(bp + tileYOffset + (tIdx*tileIndex));
     rx = x;
@@ -196,7 +207,7 @@ void DisplayComponent::DrawTileRow(byte tIdx, int x, int y, byte tileYOffset, by
         // Colour index 0 is not tracked
         if (!bgWinBuffer[rx] && cIdx) bgWinBuffer[rx] = cIdx;
         rx ++;
-    }            
+    }
 }
 
 void DisplayComponent::DrawSpritesRow(byte y)
@@ -237,9 +248,8 @@ void DisplayComponent::DrawSpritesRow(byte y)
         tileYOffset = (spr.attr&OAM_Y_FLIP ? ( tileSize - (y - yPos) ) : (y - yPos)) * 2;
 
         // CGB requires a bank switch for the correct tile data
-        if (cgbProfile) {
-            mmu.PokeByte(0xFF4F, spr.attr & 0x8);
-        }
+        byte sprBnk = cgbProfile ? (spr.attr & 0x8) : 0; 
+        mmu.PokeByte(0xFF4F, sprBnk);
 
         tileRow = mmu.PeekWord(bp + tileYOffset + (spr.tIdx*tileIndex));
         rx = xPos;
@@ -314,21 +324,25 @@ void DisplayComponent::DrawBackgroundRow(byte y)
 
     // Draw a single horizontal (x) row across the screen
     word tilesRow = (((byte)(lcdRegs.SCY + y) / tileHeight) * 32);
+
     byte scrollOffset = lcdRegs.SCX / 8;
+
+    // Set to bank 0 for tile offset
+    mmu.PokeByte(0xFF4F, 0x0);
+
     for (int i = 0; i < 32; i++) {
         sbyte tIdx = mmu.PeekByte(tileMapBase + tilesRow + (i + scrollOffset) % 32);
         byte tAttr = 0;
 
         // Get CGB attributes
         // Requires a bank switch
-        if (cgbProfile) {
-            mmu.PokeByte(0xFF4F, 0x1);
-            tAttr = mmu.PeekByte(tileMapBase + tilesRow + (i + scrollOffset) % 32);
-        }
+        mmu.PokeByte(0xFF4F, 0x1);
+        tAttr = mmu.PeekByte(tileMapBase + tilesRow + (i + scrollOffset) % 32);
+
         // Draw the tiles
         DrawTileRow(addressMode ? (byte)tIdx : tIdx+0x80, x, y, (((lcdRegs.SCY%8) + y ) % tileWidth) * 2, i == 0 ? startingXPixel : 0, addressMode ? 0x0 : 0x800, tAttr);
         x += (tileWidth - (i == 0 ? startingXPixel : 0));
-    }
+    }      
 }
 
 void DisplayComponent::DrawWindowRow(byte y)
@@ -349,14 +363,24 @@ void DisplayComponent::DrawWindowRow(byte y)
     addressMode =  lcdRegs.LCDC & LCDC_BG_WINDOW_TILE_DATA_MASK;
 
     // Get tile map memory location
-    word tileMap = (lcdRegs.LCDC & LCDC_WINDOW_TILE_MAP_MASK) ? 0x9C00 : 0x9800;
+    word tileMapBase = (lcdRegs.LCDC & LCDC_WINDOW_TILE_MAP_MASK) ? 0x9C00 : 0x9800;
 
     // Draw a single horizontal (x) row across the screen
-    word tileRow = (((y-lcdRegs.WY) / tileHeight) * 32);
+    word tilesRow = (((y-lcdRegs.WY) / tileHeight) * 32);
+
+    // Set to bank 0 for tile offset
+    mmu.PokeByte(0xFF4F, 0x0);
+
     for (int i = 0; i < 32; i++) {
-        sbyte tIdx = mmu.PeekByte(tileMap + tileRow + (i) % 32);
+        sbyte tIdx = mmu.PeekByte(tileMapBase + tilesRow + (i) % 32);
+
+        // Get CGB attributes
+        // Requires a bank switch
+        mmu.PokeByte(0xFF4F, 0x1);
+        byte tAttr = mmu.PeekByte(tileMapBase + tilesRow + (i) % 32);
+
         // Draw the tiles
-        DrawTileRow(addressMode ? (byte)tIdx : tIdx+0x80, x + (lcdRegs.WX-0x7), y, ((y-lcdRegs.WY) % tileWidth) * 2, 0, addressMode ? 0x0 : 0x800, 0);
+        DrawTileRow(addressMode ? (byte)tIdx : tIdx+0x80, x + (lcdRegs.WX-0x7), y, ((y-lcdRegs.WY) % tileWidth) * 2, 0, addressMode ? 0x0 : 0x800, tAttr);
         x += tileWidth;
     }
 }
@@ -430,11 +454,18 @@ void DisplayComponent::Cycle()
             break;
         case 3:
             if (displayCycles >= 172) {
+
+                // Vram bank is trashed during screen refresh
+                byte tmp_vram_bnk = mmu.PeekByte(0xFF4F);
+
                 DrawBackgroundRow(lcdRegs.LY);
                 DrawWindowRow(lcdRegs.LY);
                 DrawSpritesRow(lcdRegs.LY);
                 displayCycles -= 172;
                 lcdRegs.STAT &= ~(0x3);
+
+                // Restore original value when done
+                mmu.PokeByte(0xFF4F, tmp_vram_bnk);
 
                 // Check if we can enable hblank stat interrupt 
                 if (lcdRegs.STAT & STAT_MODE0) {
@@ -500,6 +531,11 @@ bool DisplayComponent::MemoryMapped(word addr)
 
     // CGB sprite color palette 
     if (addr == 0xFF6A || addr == 0xFF6B) {
+        return true;
+    }
+
+    // VRam
+    if (addr >= 0x8000 && addr <= 0x9FFF) {
         return true;
     }
 

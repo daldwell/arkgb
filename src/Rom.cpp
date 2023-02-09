@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctime>
 #include "Rom.h"
 #include "Mmu.h"
 #include "Typedefs.h"
@@ -12,6 +13,101 @@ char romName[100];
 char ramName[100];
 char buf[100];
 struct RomHeader * romHeader;
+RtcRegister rtc;
+
+void RtcRegister::LatchClock()
+{
+    time_t now = time(0);
+    tm  *localTime = localtime(&now);
+    sec = localTime->tm_sec;
+    min = localTime->tm_min;
+    hour = localTime->tm_hour;
+    dl = 0; // TODO
+}
+
+void RtcRegister::SetMap(word addr)
+{
+    switch (addr)
+    {
+        case 0x08:
+        case 0x09:
+        case 0x0A:
+        case 0x0B:
+        case 0x0C:
+            map = addr;
+            break;
+        default:
+            Log("Unknown RTC address", ERROR);
+            exit(1);
+    }
+}
+
+byte * RtcRegister::GetMap()
+{
+    switch (map)
+    {
+        case 0x08:
+            return &sec;
+        case 0x09:
+            return &min;
+        case 0x0A:
+            return &hour;
+        case 0x0B:
+            return &dl;
+        case 0x0C:
+            return &dh;
+    }
+
+    Log("Unknown RTC address", ERROR);
+    exit(1);
+}
+
+// byte RtcRegister::PeekByte(word addr)
+// {
+//     switch (addr)
+//     {
+//         case 0x08:
+//             return sec;
+//         case 0x09:
+//             return min;
+//         case 0x0A:
+//             return hour;
+//         case 0x0B:
+//             return dl;
+//         case 0x0C:
+//             return dh;
+//     }
+
+//     Log("Unknown RTC address", ERROR);
+//     exit(1);
+// }
+
+// void RtcRegister::PokeByte(word addr, byte value)
+// {
+//     // TODO: this is not accurate, writing should update the real "behind the scenes" clock, not just the latched registers
+//     switch (addr)
+//     {
+//         case 0x08:
+//             sec = value;
+//             break;
+//         case 0x09:
+//             min = value;
+//             break;
+//         case 0x0A:
+//             hour = value;
+//             break;
+//         case 0x0B:
+//             dl = value;
+//             break;
+//         case 0x0C:
+//             dh = value;
+//             break;
+//         default:
+//             Log("Unknown RTC address", ERROR);
+//             exit(1);
+//     }
+
+// }
 
 static byte getRamBanks()
 {
@@ -66,6 +162,8 @@ void loadRom(const char * rmt)
         case 0x03:
         case 0x10:     // Handle MBC 3
         case 0x13:
+        case 0x1b:     // Handle MBC 5
+
             // Read all banks
             for (int i = 1; i < (0x2 << romHeader->romSize)-1; i++) {
                 fileRead(&rom_bnk[i][0], sizeof(byte), 0x4000, romFile);
@@ -84,6 +182,7 @@ void loadRom(const char * rmt)
         case 0x03:     // Handle MBC 1
         case 0x10:     // Handle MBC 3
         case 0x13:
+        case 0x1b:     // Handle MBC 5
             // Read battery backed RAM
             strcpy(ramName, romName);
             changeExtension(ramName, "sav");

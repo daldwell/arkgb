@@ -61,6 +61,7 @@ void InterruptComponent::Cycle()
             IMERegister = false;
             IFRegister &= ~(vblank_flag);
             interruptServiceRoutine(0x40);
+            return;
         }
 
         // LCD stat interrupt
@@ -68,6 +69,7 @@ void InterruptComponent::Cycle()
             IMERegister = false;
             IFRegister &= ~(lcd_flag);
             interruptServiceRoutine(0x48);
+            return;
         }
 
         // Timer interrupt
@@ -75,6 +77,7 @@ void InterruptComponent::Cycle()
             IMERegister = false;
             IFRegister &= ~(timer_flag);
             interruptServiceRoutine(0x50);
+            return;
         }
 
         // Serial interrupt
@@ -82,6 +85,7 @@ void InterruptComponent::Cycle()
             IMERegister = false;
             IFRegister &= ~(serial_flag);
             interruptServiceRoutine(0x58);
+            return;
         }
 
         // Joypad interrupt
@@ -89,6 +93,7 @@ void InterruptComponent::Cycle()
             IMERegister = false;
             IFRegister &= ~(joypad_flag);
             interruptServiceRoutine(0x60);
+            return;
         }
     }
 }

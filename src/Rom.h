@@ -1,3 +1,4 @@
+#include <ctime>
 #include "Typedefs.h"
 
 #pragma once
@@ -20,13 +21,19 @@ struct RomHeader
     word globalChecksum;
 };
 
-struct RtcRegister
+class RtcRegister
 {
-    byte S;
-    byte M;
-    byte H;
-    byte DL;
-    byte DH;
+    public:
+        void LatchClock();
+        void SetMap(word);
+        byte * GetMap();
+    private:
+        word map;
+        byte sec;
+        byte min;
+        byte hour;
+        byte dl;
+        byte dh;
 };
 
 enum RamMode {
@@ -37,6 +44,7 @@ enum RamMode {
 
 extern struct RomHeader * romHeader;
 extern byte rom_bnk_no;
+extern RtcRegister rtc;
 
 void pokeRom(word addr, byte value);
 byte * romMemoryMap(word addr);
