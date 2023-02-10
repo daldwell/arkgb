@@ -2,14 +2,14 @@
 #include <assert.h>
 #include "Cpu.h"
 #include "Typedefs.h"
+#include "Logger.h"
 
 struct Registers regs;
-//struct Flags flags;
 
-#define flag_c_mask 1<<4
-#define flag_h_mask 1<<5
-#define flag_n_mask 1<<6
-#define flag_z_mask 1<<7
+const int flag_c_mask = 1<<4;
+const int flag_h_mask = 1<<5;
+const int flag_n_mask = 1<<6;
+const int flag_z_mask = 1<<7;
 
 bool getFlag(Flags f) {
     switch (f)
@@ -23,7 +23,7 @@ bool getFlag(Flags f) {
         case ZF:
             return regs.F & flag_z_mask;
         default:
-            printf("Error: invalid flag to get!");
+            Log("Error: invalid flag to get!", ERROR);
             exit(1);
     }
 
@@ -46,7 +46,7 @@ void setFlag(Flags f, bool toggle) {
                 regs.F |= flag_z_mask;
                 break;
             default:
-                printf("Error: invalid flag to set!");
+                Log("Error: invalid flag to set!", ERROR);
                 exit(1);
         }
     } else {
@@ -65,19 +65,8 @@ void setFlag(Flags f, bool toggle) {
                 regs.F &= ~(flag_z_mask);
                 break;
             default:
-                printf("Error: invalid flag to set!");
+                Log("Error: invalid flag to set!", ERROR);
                 exit(1);
         }
     }
 }
-
-
-// void registerCycle()
-// {
-//     // Emulate real flag register F
-//     regs.F &= 0xF0;
-//     // if (getFlag(CF)) regs.F |= 1<<4;
-//     // if (getFlag(HF)) regs.F |= 1<<5;
-//     // if (getFlag(NF)) regs.F |= 1<<6;
-//     // if (getFlag(ZF)) regs.F |= 1<<7;
-// }

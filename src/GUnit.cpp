@@ -4,6 +4,7 @@
 #include "Timer.h"
 #include "Interrupt.h"
 #include "Cpu.h"
+#include "Control.h"
 
 MmuComponent mmu;
 CpuComponent cpu;
@@ -11,6 +12,7 @@ AudioComponent audio;
 DisplayComponent display;
 TimerComponent timer;
 InterruptComponent interrupt;
+ControlComponent control;
 
 void GUCycle()
 {
@@ -32,8 +34,14 @@ void GUReset()
     audio.Reset();
 }
 
-void GUProfile(Profile profile)
+void GUSetProfile(Profile profile)
 {
     cpu.profile = profile;
     display.profile = profile;
+}
+
+void GUDispatchEvent(SDL_Event * e)
+{
+    audio.EventHandler(e);
+    control.EventHandler(e);
 }

@@ -40,12 +40,11 @@ class DisplayComponent : public GComponent
     public:
         DisplayComponent() {};
         ~DisplayComponent() {};
-        void PokeByte(word, byte);
-        byte PeekByte(word);
-        void PokeWord(word, word);
-        word PeekWord(word);
-        void Cycle();
-        void Reset();
+        void EventHandler(SDL_Event *) override;
+        void PokeByte(word, byte) override;
+        byte PeekByte(word) override;
+        void Cycle() override;
+        void Reset() override;
     protected:
         bool MemoryMapped(word);
         int GetColorFromPalette(Pixel);

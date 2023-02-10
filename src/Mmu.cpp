@@ -27,6 +27,11 @@ byte cram[0x100];
 byte unmapped = 0xFF;
 RamMode ramMode;
 
+void MmuComponent::EventHandler(SDL_Event * e)
+{
+    // Not implemented
+}
+
 byte MmuComponent::PeekByte(word addr)
 {
     // TODO: workaround for JOYP register - select either the action/direction bit plane depending on register value
@@ -40,6 +45,11 @@ byte MmuComponent::PeekByte(word addr)
         } else {
             return 0xFF;
         }
+    }
+
+    // Cpu registers
+    if (cpu.MemoryMapped(addr)) {
+        return cpu.PeekByte(addr);
     }
 
     // Audio registers
@@ -63,6 +73,7 @@ byte MmuComponent::PeekByte(word addr)
 void MmuComponent::PokeByte(word addr, byte value)
 { 
     // TODO: move this logic into the ROM module
+    // TODO: remove spaghetti logic for MBCs, move into their own modules
     // MBC1
     if (romHeader->cartType >= 0x1 && romHeader->cartType <= 0x3) {
         // Byte written to ROM space - this updates ROM banking register
@@ -160,6 +171,11 @@ void MmuComponent::PokeByte(word addr, byte value)
         byte * joy = memoryMap(addr);
         *joy = (value&0xF0) + (*joy&0xF);
         return;
+    }
+
+    // Cpu registers
+    if (cpu.MemoryMapped(addr)) {
+        return cpu.PokeByte(addr, value);
     }
 
     if (audio.MemoryMapped(addr)) {

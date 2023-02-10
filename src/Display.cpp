@@ -65,6 +65,11 @@ bool cgbOAMIncrement;
 byte cgbOAMIndex;
 byte cgbOAMPal[palSize];
 
+void DisplayComponent::EventHandler(SDL_Event * e)
+{
+    // Not implemented
+}
+
 byte DisplayComponent::PeekByte(word addr) 
 {
     if (addr >= 0xFE00 && addr <= 0xFE9F) {
@@ -388,6 +393,7 @@ void DisplayComponent::DrawWindowRow(byte y)
 void DisplayComponent::Cycle()
 {
     word dmaSrc = (word)lcdRegs.DMA << 8;
+    int cycles = cpuCycles >> doubleSpeed;
 
     // Exit if LCD is disabled
     if (!(lcdRegs.LCDC&LCDC_PPU_ENABLE_MASK)) {
@@ -405,7 +411,7 @@ void DisplayComponent::Cycle()
         if (dmaCounter == 160) lcdRegs.DMA = 0;
     }
 
-    displayCycles += cpuCycles;
+    displayCycles += cycles;
 
     switch (lcdRegs.STAT & 0x3)
     {

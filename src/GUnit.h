@@ -4,6 +4,7 @@
 #include "Timer.h"
 #include "Interrupt.h"
 #include "Cpu.h"
+#include "Control.h"
 
 #pragma once
 
@@ -13,7 +14,9 @@ extern AudioComponent audio;
 extern DisplayComponent display;
 extern TimerComponent timer;
 extern InterruptComponent interrupt;
+extern ControlComponent control;
 
 void GUCycle();
 void GUReset();
-void GUProfile(Profile profile);
+void GUSetProfile(Profile);
+void GUDispatchEvent(SDL_Event *);

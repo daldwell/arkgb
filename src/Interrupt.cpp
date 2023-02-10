@@ -16,6 +16,11 @@ static void interruptServiceRoutine(int a)
     cpuCycles += 20;
 }
 
+void InterruptComponent::EventHandler(SDL_Event *)
+{
+    // not implemented
+}
+
 byte InterruptComponent::PeekByte(word addr)
 {
     if (addr == 0xFF0F) {

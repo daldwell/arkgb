@@ -6,6 +6,7 @@
 #include "Control.h"
 #include "Debugger.h"
 #include "Rom.h"
+#include "GUnit.h"
 
 // Global window object
 Window gwindow;
@@ -85,18 +86,10 @@ void Window::EventDispatch()
         {
             running = false;
         }
-    } 
 
-    // TODO: create an event listener pattern so we can easily distribute key events across the different modules and remove module dependencies from this class
-    const Uint8* currentKeyStates = SDL_GetKeyboardState( NULL );
-    ProcessKey(Left, currentKeyStates[SDL_SCANCODE_LEFT]);
-    ProcessKey(Right, currentKeyStates[SDL_SCANCODE_RIGHT]);
-    ProcessKey(Up, currentKeyStates[SDL_SCANCODE_UP]);
-    ProcessKey(Down, currentKeyStates[SDL_SCANCODE_DOWN]);
-    ProcessKey(Start, currentKeyStates[SDL_SCANCODE_RETURN]);
-    ProcessKey(Select, currentKeyStates[SDL_SCANCODE_BACKSPACE]);
-    ProcessKey(A, currentKeyStates[SDL_SCANCODE_S]);
-    ProcessKey(B, currentKeyStates[SDL_SCANCODE_A]);
+        // Dispatch to GB unit
+        GUDispatchEvent( &e );
+    } 
 }
 
 void Window::ClearSurface()

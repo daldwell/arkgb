@@ -12,19 +12,32 @@ bool cpuRunning;
 bool halt;
 bool doubleSpeed;
 
-void CpuComponent::PokeByte(word, byte)
+void CpuComponent::EventHandler(SDL_Event * e)
 {
-    // not implemented
+    // Not implemented
 }
 
-byte CpuComponent::PeekByte(word)
+void CpuComponent::PokeByte(word addr, byte value)
 {
-    // not implemented
+    if (addr == 0xFF4D) {
+        doubleSpeed = (value == 1 ? true : false);
+    }
 }
 
-bool CpuComponent::MemoryMapped(word)
+byte CpuComponent::PeekByte(word addr)
 {
-    // not implemented
+    if (addr == 0xFF4D) {
+        return doubleSpeed ? 0x80 : 0;
+    }
+}
+
+bool CpuComponent::MemoryMapped(word addr)
+{
+    if (addr == 0xFF4D) {
+        return true;
+    }
+
+    return false;
 }
 
 void CpuComponent::Cycle()

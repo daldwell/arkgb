@@ -13,6 +13,7 @@ class GComponent
     public:
         GComponent() {};
         ~GComponent() {};
+        virtual void EventHandler(SDL_Event * e) = 0;
         virtual void PokeByte(word, byte) = 0;
         virtual byte PeekByte(word) = 0;
         virtual void Cycle() = 0;

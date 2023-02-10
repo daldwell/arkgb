@@ -3,13 +3,14 @@
 #include <string.h>
 #include <assert.h>
 #include "Typedefs.h"
+#include "Logger.h"
 
 FILE * getFileHandle(const char * name, const char * mode, bool mustExist)
 {
     FILE *fptr;
 
     if ((fptr = fopen(name,mode)) == NULL && mustExist){
-        printf("Error! opening file");
+        Log("Error! opening file", ERROR);
         exit(1);
     }
 
@@ -39,7 +40,7 @@ void fileWrite( void * buffer, long unsigned size, long unsigned count, FILE * h
     r = fwrite(buffer, size, count, handle);
 
     if (r!=count) {
-        printf("Error! writing file");
+        Log("Error! writing file", ERROR);
         exit(1);
     }
 }
@@ -51,7 +52,7 @@ void changeExtension( char * name, const char * newext)
     token = strtok(name, ".");
 
     if (token == NULL) {
-        printf("Error! invalid file name for extension change");
+        Log("Error! invalid file name for extension change", ERROR);
         exit(1);      
     }
 

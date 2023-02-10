@@ -10,7 +10,7 @@
 int main(int argv, char** args)
 {
     if (argv != 2) {
-        printf("Usage: ArkGB.exe rom.gb(c) ");
+        Log("Usage: ArkGB.exe rom.gb(c) ", INFO);
         return 0;
     }
 

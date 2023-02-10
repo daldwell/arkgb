@@ -8,10 +8,11 @@ class CpuComponent : public GComponent
     public:
         CpuComponent() {};
         ~CpuComponent() {};
-        void PokeByte(word, byte);
-        byte PeekByte(word);
-        void Cycle();
-        void Reset();
+        void EventHandler(SDL_Event *) override;
+        void PokeByte(word, byte) override;
+        byte PeekByte(word) override;
+        void Cycle() override;
+        void Reset() override;
     protected:
         bool MemoryMapped(word);
         friend class MmuComponent;
@@ -78,6 +79,7 @@ extern struct Registers regs;
 extern int cpuCycles;
 extern bool cpuRunning;
 extern bool halt;
+extern bool doubleSpeed;
 
 void setFlag(Flags, bool);
 bool getFlag(Flags);

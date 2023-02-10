@@ -211,7 +211,7 @@ void loadRom(const char * rmt)
     // Set GBC profile if cart is compatible
     byte gbcFlag = romHeader->title[0xF];
     if (gbcFlag == 0x80 || gbcFlag == 0xC0) {
-        GUProfile(CGB);
+        GUSetProfile(CGB);
     }
 }
 
