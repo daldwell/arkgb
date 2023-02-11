@@ -16,10 +16,7 @@ int main(int argv, char** args)
 
     Log("Welcome to ArkGB!", INFO);
 
-    initOpc();
-    //executeTests();
-
-    loadRom(args[1]);
+    GUInit(args[1]);
     GUReset();
     initDebugger();
     cpuRunning = true;

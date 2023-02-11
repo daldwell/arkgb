@@ -34,17 +34,9 @@ void MmuComponent::EventHandler(SDL_Event * e)
 
 byte MmuComponent::PeekByte(word addr)
 {
-    // TODO: workaround for JOYP register - select either the action/direction bit plane depending on register value
-    if (addr == 0xFF00) {
-        byte * joy = memoryMap(addr);
-
-        if (! (*joy & (1<<4))) {
-            return (*joy&0xF0) + Direction;
-        } else if (! (*joy & (1<<5))) {
-            return (*joy&0xF0) + Action;
-        } else {
-            return 0xFF;
-        }
+    // Joypad registers
+    if (control.MemoryMapped(addr)) {
+        return control.PeekByte(addr);
     }
 
     // Cpu registers
@@ -166,16 +158,16 @@ void MmuComponent::PokeByte(word addr, byte value)
         }
     }
 
-    // TODO: workaround for JOYP register as this contains read-only bits that should not be overwritten
-    if (addr == 0xFF00) {
-        byte * joy = memoryMap(addr);
-        *joy = (value&0xF0) + (*joy&0xF);
+    // Joypad registers
+    if (control.MemoryMapped(addr)) {
+        control.PokeByte(addr, value);
         return;
     }
 
     // Cpu registers
     if (cpu.MemoryMapped(addr)) {
-        return cpu.PokeByte(addr, value);
+        cpu.PokeByte(addr, value);
+        return;
     }
 
     if (audio.MemoryMapped(addr)) {
@@ -272,11 +264,6 @@ byte * memoryMap(word addr)
 
                 if (addr <= 0xFEFF)
                     return &cram[addr&0xFF];
-
-                // Joypad
-                if (addr == 0xFF00) {
-                    return &JOYP; 
-                }
 
                 // Serial data
                 if (addr == 0xFF01)

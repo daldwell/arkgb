@@ -3,6 +3,7 @@
 #include "Interrupt.h"
 #include "Logger.h"
 #include <assert.h>
+#include <stdio.h>
 
 const int MASK_0 = 1;
 const int MASK_1 = 1<<1;
@@ -16,7 +17,7 @@ byte Action = 0xFF;
 void UpdateKeyReg(byte * reg, int mask, bool pressed) 
 {
     if (pressed) {
-        *reg = ~(mask);
+        *reg &= ~(mask);
     } else {
         *reg |= mask;
     }
@@ -86,6 +87,7 @@ void ControlComponent::EventHandler(SDL_Event * e)
 {
     if ( e->type == SDL_KEYUP || e->type == SDL_KEYDOWN )
     {
+        
         JoyPadKey key = KeyMap(e->key.keysym.scancode);
 
         if (key == None)
@@ -96,14 +98,27 @@ void ControlComponent::EventHandler(SDL_Event * e)
     }
 }
 
-void ControlComponent::PokeByte(word, byte)
+void ControlComponent::PokeByte(word addr, byte value)
 {
-    // not implemented
+    if (addr == 0xFF00) {
+        JOYP = (value&0xF0) + (JOYP&0xF);
+        return;
+    }
 }
 
-byte ControlComponent::PeekByte(word)
+byte ControlComponent::PeekByte(word addr)
 {
-    // not implemented
+    // Select either the action/direction bit plane depending on register value
+    if (addr == 0xFF00) {
+
+        if (! (JOYP & (1<<4))) {
+            return (JOYP&0xF0) + Direction;
+        } else if (! (JOYP & (1<<5))) {
+            return (JOYP&0xF0) + Action;
+        } else {
+            return 0xFF;
+        }
+    }
 }
 
 void ControlComponent::Cycle()
@@ -118,5 +133,9 @@ void ControlComponent::Reset()
 
 bool ControlComponent::MemoryMapped(word addr)
 {
+    if (addr == 0xFF00) {
+        return true;
+    }
+
     return false;
 }

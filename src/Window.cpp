@@ -3,9 +3,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include "Window.h"
-#include "Control.h"
 #include "Debugger.h"
-#include "Rom.h"
 #include "GUnit.h"
 
 // Global window object
@@ -60,7 +58,7 @@ Window::Window()
 Window::~Window()
 {
     //dumpTraceLines();
-    closeRom();
+    GUShutdown();
 
     //Destroy window
     SDL_DestroyWindow( window );

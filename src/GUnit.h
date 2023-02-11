@@ -16,7 +16,9 @@ extern TimerComponent timer;
 extern InterruptComponent interrupt;
 extern ControlComponent control;
 
+void GUInit(char *);
 void GUCycle();
 void GUReset();
+void GUShutdown();
 void GUSetProfile(Profile);
 void GUDispatchEvent(SDL_Event *);

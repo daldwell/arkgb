@@ -5,6 +5,8 @@
 #include "Interrupt.h"
 #include "Cpu.h"
 #include "Control.h"
+#include "Rom.h"
+#include "Opc.h"
 
 MmuComponent mmu;
 CpuComponent cpu;
@@ -13,6 +15,14 @@ DisplayComponent display;
 TimerComponent timer;
 InterruptComponent interrupt;
 ControlComponent control;
+
+void GUInit(char * rom)
+{
+    initOpc();
+    //executeTests();
+
+    loadRom(rom);
+}
 
 void GUCycle()
 {
@@ -32,6 +42,11 @@ void GUReset()
     timer.Reset();
     display.Reset();
     audio.Reset();
+}
+
+void GUShutdown()
+{
+    closeRom();
 }
 
 void GUSetProfile(Profile profile)

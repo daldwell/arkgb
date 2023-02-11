@@ -38,6 +38,12 @@ const int OAM_Y_FLIP = 1<<6;
 const int OAM_X_FLIP = 1<<5;
 const int OAM_PALETTE = 1<<4;
 
+const int BG_OAM_PRIORITY = 1<<7;
+const int BG_Y_FLIP = 1<<6;
+const int BG_X_FLIP = 1<<5;
+const int BG_BANK = 1<<3;
+const int BG_PALETTE = 0x7;
+
 Sprite oamTable[40];
 struct LcdRegister lcdRegs;
 int displayCycles;
@@ -189,8 +195,11 @@ void DisplayComponent::DrawTileRow(byte tIdx, int x, int y, byte tileYOffset, by
     tileRow = mmu.PeekWord(bp + tileYOffset + (tIdx*tileIndex));
     rx = x;
     for (int k = 7-iniPxl; k >= 0; k--) {
-        cIdx = tileRow & (0x100<<k) ? 2 : 0;
-        cIdx += tileRow & (0x1<<k) ? 1 : 0;
+        // Horizontal flip - read bits from other direction (CGB only)
+        int tileBit = ((tAttr&BG_X_FLIP) && cgbProfile) ? (tileWidth-1) - k : k;
+        
+        cIdx = tileRow & (0x100<<tileBit) ? 2 : 0;
+        cIdx += tileRow & (0x1<<tileBit) ? 1 : 0;
 
         if (cgbProfile) {
             palIndex = (tAttr & 0x7) << 3;
@@ -206,6 +215,7 @@ void DisplayComponent::DrawTileRow(byte tIdx, int x, int y, byte tileYOffset, by
         }
 
         color = GetColorFromPalette(px);
+
         gwindow.DrawPixel(rx, y, color);
         // Keep track of BG/Win pixels, used to mask sprites later
         // Colour index 0 is not tracked
@@ -221,7 +231,6 @@ void DisplayComponent::DrawSpritesRow(byte y)
     byte cIdx;
     int color;
     byte tileYOffset;
-    byte pixelXPos;
     int rx = 0;
     word bp = 0x8000;
     bool hasPriority;
@@ -259,8 +268,12 @@ void DisplayComponent::DrawSpritesRow(byte y)
         tileRow = mmu.PeekWord(bp + tileYOffset + (spr.tIdx*tileIndex));
         rx = xPos;
         for (int k = 7; k >= 0; k--) {
-            cIdx = tileRow & (0x100<<k) ? 2 : 0;
-            cIdx += tileRow & (0x1<<k) ? 1 : 0;
+
+            // Horizontal flip - read bits from other direction
+            int tileBit = (spr.attr&OAM_X_FLIP) ? (tileWidth-1) - k : k;
+
+            cIdx = tileRow & (0x100<<tileBit) ? 2 : 0;
+            cIdx += tileRow & (0x1<<tileBit) ? 1 : 0;
 
             if (cgbProfile) {
                 palIndex = (spr.attr & 0x7) << 3;
@@ -276,20 +289,17 @@ void DisplayComponent::DrawSpritesRow(byte y)
             }
             color = GetColorFromPalette(px);
 
-            // Determine pixel position based on sprite flip attribute
-            pixelXPos = spr.attr&OAM_X_FLIP ? (xPos+7) - (rx-xPos): rx;
-
             // Sprite is hidden behind background
-            if (spr.attr&OAM_BG_WINDOW_OVER_OBJ && bgWinBuffer[pixelXPos]) {
+            if (spr.attr&OAM_BG_WINDOW_OVER_OBJ && bgWinBuffer[rx]) {
                 color = 0xE;
             }
 
             // Check if the sprite has priority for this pixel position
             // The leftmost sprite has priority over others
             // If two sprites share the same position, the first one in OAM memory has priority
-            if (sprBuffer[pixelXPos] == 0xF || hasPriority) {
+            if (sprBuffer[rx] == 0xF || hasPriority) {
                 hasPriority = true;
-                if (cIdx != 0) sprBuffer[pixelXPos] = color;
+                if (cIdx != 0) sprBuffer[rx] = color;
             }
 
             rx ++;
@@ -309,6 +319,7 @@ void DisplayComponent::DrawBackgroundRow(byte y)
     int x = 0;
     //int y = 0;
     bool addressMode = false;
+    bool cgbProfile = (profile == CGB);
 
     // Exit if window/background not enabled
     if (! lcdRegs.LCDC & LCDC_BG_WINDOW_ENABLE_MASK) return;
@@ -344,8 +355,13 @@ void DisplayComponent::DrawBackgroundRow(byte y)
         mmu.PokeByte(0xFF4F, 0x1);
         tAttr = mmu.PeekByte(tileMapBase + tilesRow + (i + scrollOffset) % 32);
 
+        // Calculate tile Y offset, taking into account vertical flip bit (CGB only)
+        byte tileYoffset = (((lcdRegs.SCY%8) + y ) % tileWidth);
+        if ((tAttr & BG_Y_FLIP) && cgbProfile ) tileYoffset = ((tileHeight-1) - tileYoffset);
+        tileYoffset <<= 1; // Multiply offset as tiles are 2 bytes long
+
         // Draw the tiles
-        DrawTileRow(addressMode ? (byte)tIdx : tIdx+0x80, x, y, (((lcdRegs.SCY%8) + y ) % tileWidth) * 2, i == 0 ? startingXPixel : 0, addressMode ? 0x0 : 0x800, tAttr);
+        DrawTileRow(addressMode ? (byte)tIdx : tIdx+0x80, x, y, tileYoffset, i == 0 ? startingXPixel : 0, addressMode ? 0x0 : 0x800, tAttr);
         x += (tileWidth - (i == 0 ? startingXPixel : 0));
     }      
 }
