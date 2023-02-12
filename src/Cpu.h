@@ -1,6 +1,22 @@
 #include "Typedefs.h"
+#include "GComponent.h"
 
 #pragma once
+
+class CpuComponent : public GComponent
+{
+    public:
+        CpuComponent() {};
+        ~CpuComponent() {};
+        void EventHandler(SDL_Event *) override;
+        void PokeByte(word, byte) override;
+        byte PeekByte(word) override;
+        void Cycle() override;
+        void Reset() override;
+    protected:
+        bool MemoryMapped(word);
+        friend class MmuComponent;
+};
 
 struct Registers
 {
@@ -63,11 +79,8 @@ extern struct Registers regs;
 extern int cpuCycles;
 extern bool cpuRunning;
 extern bool halt;
+extern bool doubleSpeed;
 
-void cpuStart();
-void cpuStop();
-void cpuCycle();
-void cpuReset();
 void setFlag(Flags, bool);
 bool getFlag(Flags);
 

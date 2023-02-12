@@ -15,6 +15,7 @@ SDL_AudioDeviceID audio_device_id;
 // Audio buffer data
 float mixData[2048];
 int bufferCursor;
+int speedFactor;
 
 byte dutyWaveTable[4]
 {
@@ -31,9 +32,30 @@ float currentVol;
 
 byte wav[0x10]; 
 
+const byte timerDecrement = 4;
+
 AudioComponent::AudioComponent()
 {
     Reset();
+}
+
+void AudioComponent::EventHandler(SDL_Event * e)
+{
+    if ( e->type == SDL_KEYUP )
+    {
+        // Used to artifically speed up emulation by capturing fewer audio samples per cycle
+        switch (e->key.keysym.sym)
+        {
+            case SDLK_KP_PLUS:
+                speedFactor = 4;
+                break;
+            case SDLK_KP_MINUS:
+                speedFactor = 0;
+                break;
+            default:
+                break;
+        }
+    }
 }
 
 byte AudioComponent::PeekByte(word addr)
@@ -462,7 +484,7 @@ void PulseChannel2::Cycle()
 
     // Advance channel frequency timer
     // Step wave duty when timer reaches zero
-    freqTimer -= 4;
+    freqTimer -= (timerDecrement >> doubleSpeed);
     if (freqTimer <= 0) {
         dutyPos = (dutyPos+1) % 8;
         freqTimer += (2048 - (((trigger & 0x7) << 8) + freq)) * 4;
@@ -490,7 +512,7 @@ void WaveChannel::Cycle()
 
     // Advance channel frequency timer
     // Step wave duty when timer reaches zero
-    freqTimer -= 4;
+    freqTimer -= (timerDecrement >> doubleSpeed);
     if (freqTimer <= 0) {
         
         // Reload wave sample if crossing 2 byte boundary
@@ -500,7 +522,6 @@ void WaveChannel::Cycle()
         }
 
         freqTimer += (2048 - (((trigger & 0x7) << 8) + freq)) * 2;
-        //printf("frer %x, trig %x, freq %x, wavsample %x, sample %x, pos %x\n", freq,((trigger & 0x7) << 8),freqTimer, wavSample, sample, (wavPos/2));
     }
 
     if (wavPos % 2 == 0) {
@@ -565,7 +586,7 @@ void NoiseChannel::Cycle()
     EnvelopeSweep();
 
     //Peform LFSR cycle
-    freqTimer -= 4;
+    freqTimer -= (timerDecrement >> doubleSpeed);
 
     if (freqTimer <= 0) {
         freqTimer += (divisorCode > 0 ? (divisorCode << 4) : 8) << shiftAmount;
@@ -595,6 +616,7 @@ void AudioComponent::Cycle()
 {
     bool incFs = false;
     word out = 0;
+    int cycleFactor = 4;
 
     // TODO: Dirty rotten hack
     timeRegs.DIV -= cpuCycles;
@@ -602,12 +624,12 @@ void AudioComponent::Cycle()
     // Run if APU is turned on
     if (audioRegs.ctrl.power&0x80) {
 
-        for (int i = 0; i < (cpuCycles/4); i++) {
+        for (int i = 0; i < (cpuCycles/cycleFactor); i++) {
                 
-            audioCycles += 4;
-            timeRegs.DIV += 4;
+            audioCycles += (cycleFactor >> doubleSpeed) >> speedFactor;
+            timeRegs.DIV += cycleFactor;
 
-            out = (timeRegs.DIV & 0x1000);
+            out = (timeRegs.DIV & (0x1000 << doubleSpeed));
             if (!out && fsEdge) {
                 fsEdge = false;
                 incFs = true;

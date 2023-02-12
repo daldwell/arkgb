@@ -10,22 +10,19 @@
 int main(int argv, char** args)
 {
     if (argv != 2) {
-        printf("Usage: ArkGB.exe rom.gb(c) ");
+        Log("Usage: ArkGB.exe rom.gb(c) ", INFO);
         return 0;
     }
 
     Log("Welcome to ArkGB!", INFO);
 
-    initOpc();
-    //executeTests();
-
-    loadRom(args[1]);
-    cpuReset();
+    GUInit(args[1]);
+    GUReset();
     initDebugger();
     cpuRunning = true;
     while (gwindow.running) {
         if (cpuRunning) {
-            cpuCycle();
+            GUCycle();
         } 
     }
     

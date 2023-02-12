@@ -1,7 +1,9 @@
-#include <stdlib.h>
+#include <iostream>
 #include "Logger.h"
 
 #define MAX_LOG 1024
+
+using namespace std;
 
 LogItem logs[MAX_LOG];
 int logTail;
@@ -9,6 +11,10 @@ int logTail;
 
 void Log(const char * msg, Severity Severity)
 {
+    if (Severity < DEBUG) {
+        cout << msg << "\n";
+    }
+    
     logTail = (logTail+1)&(MAX_LOG-1);
     logs[logTail].msg = msg;
     logs[logTail].severity = Severity;

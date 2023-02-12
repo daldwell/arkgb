@@ -1,6 +1,5 @@
+#include <algorithm>
 #include <stdio.h>
-#include <stdlib.h>
-#include <assert.h>
 #include "Mmu.h"
 #include "Typedefs.h"
 #include "Display.h"
@@ -13,32 +12,37 @@
 #include "Rom.h"
 #include "Debugger.h"
 #include "GUnit.h"
+#include "Logger.h"
 
-byte rom[0x4000];
-byte rom_bnk[0xFF][0x4000];
-byte rom_bnk_no;
 byte vram[1][0x2000]; 
-byte ram[0x4][0x2000]; 
-byte ram_bnk_no;
-byte wram[0x2000]; 
+byte vram_bnk_no;
+byte wram[0x7][0x1000]; 
+byte wram_bnk_no = 1;
 byte hram[0x100]; 
 byte cram[0x100]; 
 byte unmapped = 0xFF;
-RamMode ramMode;
+
+void MmuComponent::EventHandler(SDL_Event * e)
+{
+    // Not implemented
+}
 
 byte MmuComponent::PeekByte(word addr)
 {
-    // TODO: workaround for JOYP register - select either the action/direction bit plane depending on register value
-    if (addr == 0xFF00) {
-        byte * joy = memoryMap(addr);
+    // ROM
+    if (romComponent.MemoryMapped(addr)) {
+        //printf("PEEK ROM %x\n", addr);
+        return romComponent.PeekByte(addr);
+    }
 
-        if (! (*joy & (1<<4))) {
-            return (*joy&0xF0) + Direction;
-        } else if (! (*joy & (1<<5))) {
-            return (*joy&0xF0) + Action;
-        } else {
-            return 0xFF;
-        }
+    // Joypad registers
+    if (control.MemoryMapped(addr)) {
+        return control.PeekByte(addr);
+    }
+
+    // Cpu registers
+    if (cpu.MemoryMapped(addr)) {
+        return cpu.PeekByte(addr);
     }
 
     // Audio registers
@@ -61,69 +65,26 @@ byte MmuComponent::PeekByte(word addr)
 
 void MmuComponent::PokeByte(word addr, byte value)
 { 
-    // TODO: move this logic into the ROM module
-    // MBC1
-    if (romHeader->cartType >= 0x1 && romHeader->cartType <= 0x3) {
-        // Byte written to ROM space - this updates ROM banking register
-        if (addr < 0x1FFF) {
-            // Toggle cart RAM register
-            ramMode = (value == 0xA ? RamEnabled : RamDisabled);
-            return;
-        } else if (addr < 0x3FFF) {
-            // Set ROM bank
-            rom_bnk_no = (value&0x1F) > 0 ? (value&0x1F)-1 : 0;
-            return;
-        } else if (addr < 0x5FFF) {
-            // Set RAM bank
-            // TODO: handle Banking select mode
-            ram_bnk_no = (value&0x3) > 0 ? (value&0x3)-1 : 0;
-            return;
-        } else if (addr < 0x7FFF) {
-            // TODO: handle Banking select mode
-            // assert(0==1);
-            return;
-        }
-    } 
-    // MBC 3
-    else if (romHeader->cartType >= 0xF && romHeader->cartType <= 0x13) {
-        // Byte written to ROM space - this updates ROM banking register
-        if (addr < 0x1FFF) {
-            // Toggle cart RAM register
-            ramMode = (value == 0xA ? RamEnabled : RamDisabled);
-            return;
-        } else if (addr < 0x3FFF) {
-            // Set ROM bank
-            rom_bnk_no = (value&0x7F) > 0 ? (value&0x7F)-1 : 0;
-            return;
-        } else if (addr < 0x5FFF) {
-            // Set RAM bank
-            // TODO: handle real time clock
-            if ((value) >= 0x8 && (value) <= 0xC ) {
-                ramMode = RamRtc;
-                return;
-            } 
 
-            ram_bnk_no = (value&0x3) > 0 ? (value&0x3)-1 : 0;
-            return;
-        } else if (addr < 0x7FFF) {
-            // TODO: handle real time clock
-            // printf("address: %x value: %x PC %x rombank %x rambank %x\n", addr, value, regs.PC, rom_bnk_no, ram_bnk_no);
-            // assert(0==1);
-            return;
-        }
-    }
-    // Default (should be MBC 0) 
-    else {
-        if (addr < 0x7FFF) {
-            // Block ROM writes
-            return;
-        }
+    // ROM
+    if (romComponent.MemoryMapped(addr)) {
+        romComponent.PokeByte(addr, value);
+        return;
     }
 
-    // TODO: workaround for JOYP register as this contains read-only bits that should not be overwritten
-    if (addr == 0xFF00) {
-        byte * joy = memoryMap(addr);
-        *joy = (value&0xF0) + (*joy&0xF);
+    if (addr == 0xFF70) {
+        wram_bnk_no = std::max(1, (value&0x7));
+    }
+
+    // Joypad registers
+    if (control.MemoryMapped(addr)) {
+        control.PokeByte(addr, value);
+        return;
+    }
+
+    // Cpu registers
+    if (cpu.MemoryMapped(addr)) {
+        cpu.PokeByte(addr, value);
         return;
     }
 
@@ -175,46 +136,21 @@ bool MmuComponent::MemoryMapped(word addr)
     return false;
 }
 
+/*
+This method is deprecated and will be phased out in favour of GComponent Peek/Poke byte
+*/
 byte * memoryMap(word addr)
 {
     switch (addr&0xF000)
     {
-
-        // Rom bank 0
-        // TODO: add startup rom
-        case 0x0000:
-        case 0x1000:
-        case 0x2000:
-        case 0x3000:
-            return &rom[addr];
-        // Rom bank 1..n
-        // TODO: more than bank 1
-        case 0x4000:
-        case 0x5000:
-        case 0x6000:
-        case 0x7000:        
-            return &rom_bnk[rom_bnk_no][addr&0x3FFF];
-        // Vram
-        // TODO: vram banks
-        case 0x8000:
-        case 0x9000:
-            return &vram[0][addr&0x1FFF];
-        // Cart ram
-        case 0xA000:
-        case 0xB000:
-            if (ramMode == RamEnabled) {
-                return &ram[ram_bnk_no][addr&0x1FFF];
-            } else {
-                return &unmapped;
-            }
         // Working ram
         case 0xC000:
+            return &wram[0][addr&0x1FFF];
         case 0xD000:
-            return &wram[addr&0x1FFF];
+            return &wram[wram_bnk_no][addr&0x1FFF];
         // Shadow working ram
         case 0xE000:
-            return &wram[addr&0xFFF];
-        // Upper bound of Shadow Working ram
+            return &wram[0][addr&0xFFF];
         case 0xF000:
      
             //TODO: sound, IO registers
@@ -222,11 +158,6 @@ byte * memoryMap(word addr)
 
                 if (addr <= 0xFEFF)
                     return &cram[addr&0xFF];
-
-                // Joypad
-                if (addr == 0xFF00) {
-                    return &JOYP; 
-                }
 
                 // Serial data
                 if (addr == 0xFF01)
@@ -252,7 +183,6 @@ byte * memoryMap(word addr)
                     }
                 }
 
-                //assert(2==0);
                 return &unmapped;
             }
 
@@ -269,10 +199,14 @@ byte * memoryMap(word addr)
             
             return &unmapped;
             // TODO: move to error handler
-            printf("Error: memory could not be mapped: %x", addr);
+            Log("Error: memory could not be mapped", ERROR);
+            printf("Memory %x", addr);
+
             exit(1);
         default:
-            printf("Error: memory could not be mapped: %x", addr);
+            Log("Error: memory could not be mapped", ERROR);
+            printf("Memory %x", addr);
+
             exit(1);
     }
 }

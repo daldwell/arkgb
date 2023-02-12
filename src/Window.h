@@ -13,7 +13,7 @@ class Window
         void RefreshWindow();
         void ClearSurface();
         void DrawPixel(int, int, int);
-        int GetRGB(int r, int g, int b);
+        int GetRGB(byte r, byte g, byte b);
     private:
         //The window we'll be rendering to
         SDL_Window* window = NULL;

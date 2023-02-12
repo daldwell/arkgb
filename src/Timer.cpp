@@ -18,6 +18,11 @@ struct TAC tacs[4]
 };
 bool timaOver = false;
 
+void TimerComponent::EventHandler(SDL_Event * e)
+{
+    // Not implemented
+}
+
 byte TimerComponent::PeekByte(word addr)
 {
     // Not implemented

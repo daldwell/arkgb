@@ -6,8 +6,8 @@ enum Severity
 {
     EMPTY = 0,
     INFO,
-    DEBUG,
-    ERROR
+    ERROR,
+    DEBUG
 };
 
 struct LogItem

@@ -554,7 +554,7 @@ struct Instruction
             cpuCycles += (cycount[1] > 0 && !regs.jmp) ? cycount[1] : cycount[0];
         }
 
-        addTraceLine(code, cpuCycles, regs.PC, regs.SP, mmu.PeekWord(regs.SP), length, rom_bnk_no);
+        //addTraceLine(code, cpuCycles, regs.PC, regs.SP, mmu.PeekWord(regs.SP), length, rom_bnk_no);
 
         // Effect of calling IE is delayed by 1 instruction, check the counter here
         if (IMECounter > 0) {

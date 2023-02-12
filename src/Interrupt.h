@@ -15,10 +15,11 @@ class InterruptComponent : GComponent
     public:
         InterruptComponent() {};
         ~InterruptComponent() {};
-        void PokeByte(word, byte);
-        byte PeekByte(word);
-        void Cycle();
-        void Reset();
+        void EventHandler(SDL_Event *) override;
+        void PokeByte(word, byte) override;
+        byte PeekByte(word) override;
+        void Cycle() override;
+        void Reset() override;
     protected:
         bool MemoryMapped(word);
     friend class MmuComponent;

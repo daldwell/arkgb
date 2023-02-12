@@ -3,6 +3,7 @@
 #pragma once
 
 extern int audioCycles;
+extern int speedFactor;
 
 // Channel variables
 struct AudioRegisters
@@ -108,17 +109,16 @@ class NoiseChannel : AChannel
         friend class AudioComponent;
 };
 
-class AudioComponent : GComponent
+class AudioComponent : public GComponent
 {
     public:
         AudioComponent();
         ~AudioComponent() {};
-        void PokeByte(word, byte);
-        byte PeekByte(word);
-        void PokeWord(word, word);
-        word PeekWord(word);
-        void Cycle();
-        void Reset();
+        void EventHandler(SDL_Event *) override;
+        void PokeByte(word, byte) override;
+        byte PeekByte(word) override;
+        void Cycle() override;
+        void Reset() override;
     protected:
         bool MemoryMapped(word);
         PulseChannel1 pulseChannel1;
