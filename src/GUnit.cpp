@@ -15,13 +15,14 @@ DisplayComponent display;
 TimerComponent timer;
 InterruptComponent interrupt;
 ControlComponent control;
+RomComponent romComponent;
 
-void GUInit(char * rom)
+void GUInit(char * romName)
 {
     initOpc();
     //executeTests();
 
-    loadRom(rom);
+    romComponent.Load(romName);
 }
 
 void GUCycle()
@@ -46,7 +47,7 @@ void GUReset()
 
 void GUShutdown()
 {
-    closeRom();
+    romComponent.Close();
 }
 
 void GUSetProfile(Profile profile)

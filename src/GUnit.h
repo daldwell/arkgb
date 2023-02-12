@@ -5,6 +5,7 @@
 #include "Interrupt.h"
 #include "Cpu.h"
 #include "Control.h"
+#include "Rom.h"
 
 #pragma once
 
@@ -15,6 +16,7 @@ extern DisplayComponent display;
 extern TimerComponent timer;
 extern InterruptComponent interrupt;
 extern ControlComponent control;
+extern RomComponent romComponent;
 
 void GUInit(char *);
 void GUCycle();

@@ -14,103 +14,101 @@ char romName[100];
 char ramName[100];
 char buf[100];
 struct RomHeader * romHeader;
-RtcRegister rtc;
 
-void RtcRegister::LatchClock()
+void RomComponent::EventHandler(SDL_Event *) 
 {
-    time_t now = time(0);
-    tm  *localTime = localtime(&now);
-    sec = localTime->tm_sec;
-    min = localTime->tm_min;
-    hour = localTime->tm_hour;
-    dl = 0; // TODO
+    // not implemented
 }
 
-void RtcRegister::SetMap(word addr)
+void RomComponent::PokeByte(word addr, byte value) 
 {
-    switch (addr)
+    switch (addr&0xF000)
     {
-        case 0x08:
-        case 0x09:
-        case 0x0A:
-        case 0x0B:
-        case 0x0C:
-            map = addr;
+        // Rom bank 0
+        // TODO: add startup rom
+        case 0x0000:
+        case 0x1000:
+        case 0x2000:
+        case 0x3000:
+        case 0x4000:
+        case 0x5000:
+        case 0x6000:
+        case 0x7000:        
+            mbc->PokeByte(addr, value);
             break;
-        default:
-            Log("Unknown RTC address", ERROR);
-            exit(1);
+        // Cart ram
+        case 0xA000:
+        case 0xB000:
+            if (mbc->GetRamMode() == RamRtc) {
+                *mbc->GetRtcRegister().GetMap() = value;
+            } else if (mbc->GetRamMode() == RamEnabled) {
+                ram[mbc->GetRamBank()][addr&0x1FFF] = value;
+            }
+            break;
     }
 }
 
-byte * RtcRegister::GetMap()
+byte RomComponent::PeekByte(word addr) 
 {
-    switch (map)
+    switch (addr&0xF000)
     {
-        case 0x08:
-            return &sec;
-        case 0x09:
-            return &min;
-        case 0x0A:
-            return &hour;
-        case 0x0B:
-            return &dl;
-        case 0x0C:
-            return &dh;
+        // Rom bank 0
+        // TODO: add startup rom
+        case 0x0000:
+        case 0x1000:
+        case 0x2000:
+        case 0x3000:
+            return rom[0][addr];
+        // Rom bank 1..n
+        case 0x4000:
+        case 0x5000:
+        case 0x6000:
+        case 0x7000:
+            return rom[mbc->GetRomBank()][addr&0x3FFF];
+        // Cart ram
+        case 0xA000:
+        case 0xB000:
+            if (mbc->GetRamMode() == RamRtc) {
+                return *mbc->GetRtcRegister().GetMap();
+            } else if (mbc->GetRamMode() == RamEnabled) {
+                return ram[mbc->GetRamBank()][addr&0x1FFF];
+            } else {
+                return unmapped;
+            }
     }
-
-    Log("Unknown RTC address", ERROR);
-    exit(1);
 }
 
-// byte RtcRegister::PeekByte(word addr)
-// {
-//     switch (addr)
-//     {
-//         case 0x08:
-//             return sec;
-//         case 0x09:
-//             return min;
-//         case 0x0A:
-//             return hour;
-//         case 0x0B:
-//             return dl;
-//         case 0x0C:
-//             return dh;
-//     }
+void RomComponent::Cycle() 
+{
+    // not implemented
+}
 
-//     Log("Unknown RTC address", ERROR);
-//     exit(1);
-// }
+void RomComponent::Reset() 
+{
+    // not implemented
+}
 
-// void RtcRegister::PokeByte(word addr, byte value)
-// {
-//     // TODO: this is not accurate, writing should update the real "behind the scenes" clock, not just the latched registers
-//     switch (addr)
-//     {
-//         case 0x08:
-//             sec = value;
-//             break;
-//         case 0x09:
-//             min = value;
-//             break;
-//         case 0x0A:
-//             hour = value;
-//             break;
-//         case 0x0B:
-//             dl = value;
-//             break;
-//         case 0x0C:
-//             dh = value;
-//             break;
-//         default:
-//             Log("Unknown RTC address", ERROR);
-//             exit(1);
-//     }
+bool RomComponent::MemoryMapped(word addr)
+{
+    switch (addr&0xF000)
+    {
+        case 0x0000:
+        case 0x1000:
+        case 0x2000:
+        case 0x3000:
+        case 0x4000:
+        case 0x5000:
+        case 0x6000:
+        case 0x7000:        
+        case 0xA000:
+        case 0xB000:
+            return true;
+        default:
+            return false;
+    }
+}
 
-// }
-
-static byte getRamBanks()
+byte RomComponent::GetRamBanks()
 {
     byte banks;
     switch (romHeader->ramSize)
@@ -136,7 +134,7 @@ static byte getRamBanks()
     return banks;   
 }
 
-void loadRom(const char * rmt)
+void RomComponent::Load(const char * rmt)
 {
     FILE *romFile;
     FILE *ramFile;
@@ -161,22 +159,30 @@ void loadRom(const char * rmt)
     // Load rom
     switch (romHeader->cartType) {
         case 0:
+            mbc = new Mbc0;
             break;
         case 0x01:     // Handle MBC 1
+            mbc = new Mbc1;
+            break;
         case 0x03:
         case 0x10:     // Handle MBC 3
+            mbc = new Mbc3;
+            break;
         case 0x13:
         case 0x1b:     // Handle MBC 5
-
-            // Read all banks
-            for (int i = 2; i < (0x2 << romHeader->romSize); i++) {
-                fileRead(&rom[i][0], sizeof(byte), 0x4000, romFile);
-            }
+            mbc = new Mbc5;
             break;
         default:
             sprintf(buf, "Unsupported MBC code %x", romHeader->cartType);
             Log(buf, ERROR);
             exit(1);
+    }
+
+    // Read all ROM banks
+    if (romHeader->cartType != 0) {
+        for (int i = 2; i < (0x2 << romHeader->romSize); i++) {
+            fileRead(&rom[i][0], sizeof(byte), 0x4000, romFile);
+        }
     }
  
     // Load ram
@@ -193,7 +199,7 @@ void loadRom(const char * rmt)
             ramFile = getFileHandle(ramName, "rb", false);
 
             if (ramFile != NULL) {
-                banks = getRamBanks();
+                banks = GetRamBanks();
                 for (int i = 0; i < banks; i++) {
                     fileRead(&ram[i][0], sizeof(byte), 0x2000, ramFile);
                 }
@@ -218,7 +224,7 @@ void loadRom(const char * rmt)
     }
 }
 
-void closeRom()
+void RomComponent::Close()
 {
     FILE *ramFile;
     byte banks;
@@ -230,7 +236,7 @@ void closeRom()
     // Save battery backed RAM to file
     ramFile = getFileHandle(ramName,"wb", false);
     if (ramFile) {
-        banks = getRamBanks();
+        banks = GetRamBanks();
 
         for (int i = 0; i < banks; i++) {
             fileWrite(&ram[i][0], sizeof(byte), 0x2000, ramFile);

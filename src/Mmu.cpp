@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <stdio.h>
 #include "Mmu.h"
 #include "Typedefs.h"
 #include "Display.h"
@@ -13,18 +14,13 @@
 #include "GUnit.h"
 #include "Logger.h"
 
-byte rom[0x1FF][0x4000];
-byte rom_bnk_no = 1;
 byte vram[1][0x2000]; 
 byte vram_bnk_no;
-byte ram[0x10][0x2000]; 
-byte ram_bnk_no;
 byte wram[0x7][0x1000]; 
 byte wram_bnk_no = 1;
 byte hram[0x100]; 
 byte cram[0x100]; 
 byte unmapped = 0xFF;
-RamMode ramMode;
 
 void MmuComponent::EventHandler(SDL_Event * e)
 {
@@ -33,6 +29,12 @@ void MmuComponent::EventHandler(SDL_Event * e)
 
 byte MmuComponent::PeekByte(word addr)
 {
+    // ROM
+    if (romComponent.MemoryMapped(addr)) {
+        //printf("PEEK ROM %x\n", addr);
+        return romComponent.PeekByte(addr);
+    }
+
     // Joypad registers
     if (control.MemoryMapped(addr)) {
         return control.PeekByte(addr);
@@ -63,98 +65,11 @@ byte MmuComponent::PeekByte(word addr)
 
 void MmuComponent::PokeByte(word addr, byte value)
 { 
-    // TODO: move this logic into the ROM module
-    // TODO: remove spaghetti logic for MBCs, move into their own modules
-    // MBC1
-    if (romHeader->cartType >= 0x1 && romHeader->cartType <= 0x3) {
-        // Byte written to ROM space - this updates ROM banking register
-        if (addr <= 0x1FFF) {
-            // Toggle cart RAM register
-            ramMode = (value == 0xA ? RamEnabled : RamDisabled);
-            return;
-        } else if (addr <= 0x3FFF) {
-            // Set ROM bank
-            rom_bnk_no = std::max(1, (value&0x1F));
-            return;
-        } else if (addr <= 0x5FFF) {
-            // Set RAM bank
-            // TODO: handle Banking select mode
-            ram_bnk_no = (value&0x3);
-            return;
-        } else if (addr <= 0x7FFF) {
-            // TODO: handle Banking select mode
-            // assert(0==1);
-            return;
-        }
-    } 
-    // MBC 5
-    else if (romHeader->cartType == 0x1b) {
-        //printf("MBC 5 %x %x\n", addr, value);
-        // Byte written to ROM space - this updates ROM banking register
-        if (addr <= 0x1FFF) {
-            // Toggle cart RAM register
-            ramMode = (value == 0xA ? RamEnabled : RamDisabled);
-            return;
-        } else if (addr <= 0x2FFF) {
-            // Set ROM bank
-            rom_bnk_no = value;
-            return;
-        } else if (addr <= 0x3FFF) {
-            // TODO: handle 9th bit of ROM bank select
-        } else if (addr <= 0x5FFF) {
-            // Set RAM bank
-            // TODO: handle Banking select mode
-            ram_bnk_no = (value&0xF);
-            return;
-        } else if (addr <= 0x7FFF) {
-            // TODO: handle Banking select mode
-            // assert(0==1);
-            return;
-        }
-    } 
-    // MBC 3
-    else if (romHeader->cartType >= 0xF && romHeader->cartType <= 0x13) {
-        // Byte written to ROM space - this updates ROM banking register
-        if (addr <= 0x1FFF) {
-            // Toggle cart RAM register
-            ramMode = (value == 0xA ? RamEnabled : RamDisabled);
-            return;
-        } else if (addr <= 0x3FFF) {
-            // Set ROM bank
-            rom_bnk_no = std::max(1, (value&0x7F));
-            return;
-        } else if (addr <= 0x5FFF) {
 
-            // Set RAM bank
-            // TODO: handle real time clock
-            if (ramMode != RamDisabled) {
-                if ((value) >= 0x8 && (value) <= 0xC ) {
-                    rtc.SetMap(value);
-                    ramMode = RamRtc;
-                    return;
-                } else if (value <= 0x3) {
-                    ramMode = RamEnabled;
-                    ram_bnk_no = (value&0x3);
-                    return;
-                }
-            } 
-            return;
-
-        } else if (addr <= 0x7FFF) {
-            // TODO: check value 0
-            if (value == 0x1) {
-                rtc.LatchClock();
-            }
-
-            return;
-        }
-    }
-    // Default (should be MBC 0) 
-    else {
-        if (addr <= 0x7FFF) {
-            // Block ROM writes
-            return;
-        }
+    // ROM
+    if (romComponent.MemoryMapped(addr)) {
+        romComponent.PokeByte(addr, value);
+        return;
     }
 
     if (addr == 0xFF70) {
@@ -221,37 +136,13 @@ bool MmuComponent::MemoryMapped(word addr)
     return false;
 }
 
+/*
+This method is deprecated and will be phased out in favour of GComponent Peek/Poke byte
+*/
 byte * memoryMap(word addr)
 {
     switch (addr&0xF000)
     {
-
-        // Rom bank 0
-        // TODO: add startup rom
-        case 0x0000:
-        case 0x1000:
-        case 0x2000:
-        case 0x3000:
-            return &rom[0][addr];
-        // Rom bank 1..n
-        // TODO: more than bank 1
-        case 0x4000:
-        case 0x5000:
-        case 0x6000:
-        case 0x7000:        
-            return &rom[rom_bnk_no][addr&0x3FFF];
-        // Cart ram
-        case 0xA000:
-        case 0xB000:
-            if (ramMode == RamRtc) {
-                byte * test = rtc.GetMap();
-                //printf("RTC %x", *test);
-                return rtc.GetMap();
-            } else if (ramMode == RamEnabled) {
-                return &ram[ram_bnk_no][addr&0x1FFF];
-            } else {
-                return &unmapped;
-            }
         // Working ram
         case 0xC000:
             return &wram[0][addr&0x1FFF];
@@ -260,7 +151,6 @@ byte * memoryMap(word addr)
         // Shadow working ram
         case 0xE000:
             return &wram[0][addr&0xFFF];
-        // Upper bound of Shadow Working ram
         case 0xF000:
      
             //TODO: sound, IO registers
@@ -310,9 +200,13 @@ byte * memoryMap(word addr)
             return &unmapped;
             // TODO: move to error handler
             Log("Error: memory could not be mapped", ERROR);
+            printf("Memory %x", addr);
+
             exit(1);
         default:
             Log("Error: memory could not be mapped", ERROR);
+            printf("Memory %x", addr);
+
             exit(1);
     }
 }

@@ -1,7 +1,29 @@
-#include <ctime>
+#include "GComponent.h"
 #include "Typedefs.h"
+#include "Mbc.h"
 
 #pragma once
+
+class RomComponent : public GComponent
+{
+    public:
+        RomComponent() {};
+        ~RomComponent() {};
+        void EventHandler(SDL_Event *) override;
+        void PokeByte(word, byte) override;
+        byte PeekByte(word) override;
+        void Cycle() override;
+        void Reset() override;
+        void Load(const char *);
+        void Close();
+    protected:
+        byte GetRamBanks();
+        bool MemoryMapped(word);
+        byte rom[0x1FF][0x4000];
+        byte ram[0x10][0x2000]; 
+        MbcBase * mbc;
+        friend class MmuComponent;
+};
 
 struct RomHeader
 {
@@ -20,33 +42,4 @@ struct RomHeader
     word globalChecksum;
 };
 
-class RtcRegister
-{
-    public:
-        void LatchClock();
-        void SetMap(word);
-        byte * GetMap();
-    private:
-        word map;
-        byte sec;
-        byte min;
-        byte hour;
-        byte dl;
-        byte dh;
-};
-
-enum RamMode {
-    RamDisabled = 0,
-    RamEnabled,
-    RamRtc
-};
-
 extern struct RomHeader * romHeader;
-extern byte rom_bnk_no;
-extern RtcRegister rtc;
-
-void pokeRom(word addr, byte value);
-byte * romMemoryMap(word addr);
-byte * rtcMap(byte rtcRegNum);
-void loadRom(const char *);
-void closeRom();
