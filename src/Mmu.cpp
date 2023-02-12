@@ -1,6 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <assert.h>
+#include <algorithm>
 #include "Mmu.h"
 #include "Typedefs.h"
 #include "Display.h"
@@ -13,15 +11,16 @@
 #include "Rom.h"
 #include "Debugger.h"
 #include "GUnit.h"
+#include "Logger.h"
 
-byte rom[0x4000];
-byte rom_bnk[0xFF][0x4000];
-byte rom_bnk_no;
+byte rom[0x1FF][0x4000];
+byte rom_bnk_no = 1;
 byte vram[1][0x2000]; 
 byte vram_bnk_no;
 byte ram[0x10][0x2000]; 
 byte ram_bnk_no;
-byte wram[0x2000]; 
+byte wram[0x7][0x1000]; 
+byte wram_bnk_no = 1;
 byte hram[0x100]; 
 byte cram[0x100]; 
 byte unmapped = 0xFF;
@@ -75,12 +74,12 @@ void MmuComponent::PokeByte(word addr, byte value)
             return;
         } else if (addr <= 0x3FFF) {
             // Set ROM bank
-            rom_bnk_no = (value&0x1F) > 0 ? (value&0x1F)-1 : 0;
+            rom_bnk_no = std::max(1, (value&0x1F));
             return;
         } else if (addr <= 0x5FFF) {
             // Set RAM bank
             // TODO: handle Banking select mode
-            ram_bnk_no = (value&0x3) > 0 ? (value&0x3)-1 : 0;
+            ram_bnk_no = (value&0x3);
             return;
         } else if (addr <= 0x7FFF) {
             // TODO: handle Banking select mode
@@ -98,14 +97,14 @@ void MmuComponent::PokeByte(word addr, byte value)
             return;
         } else if (addr <= 0x2FFF) {
             // Set ROM bank
-            rom_bnk_no = (value > 0 ? value-1 : 0);
+            rom_bnk_no = value;
             return;
         } else if (addr <= 0x3FFF) {
             // TODO: handle 9th bit of ROM bank select
         } else if (addr <= 0x5FFF) {
             // Set RAM bank
             // TODO: handle Banking select mode
-            ram_bnk_no = (value&0xF) > 0 ? (value&0xF)-1 : 0;
+            ram_bnk_no = (value&0xF);
             return;
         } else if (addr <= 0x7FFF) {
             // TODO: handle Banking select mode
@@ -122,7 +121,7 @@ void MmuComponent::PokeByte(word addr, byte value)
             return;
         } else if (addr <= 0x3FFF) {
             // Set ROM bank
-            rom_bnk_no = (value&0x7F) > 0 ? (value&0x7F)-1 : 0;
+            rom_bnk_no = std::max(1, (value&0x7F));
             return;
         } else if (addr <= 0x5FFF) {
 
@@ -135,7 +134,7 @@ void MmuComponent::PokeByte(word addr, byte value)
                     return;
                 } else if (value <= 0x3) {
                     ramMode = RamEnabled;
-                    ram_bnk_no = (value&0x3) > 0 ? (value&0x3)-1 : 0;
+                    ram_bnk_no = (value&0x3);
                     return;
                 }
             } 
@@ -156,6 +155,10 @@ void MmuComponent::PokeByte(word addr, byte value)
             // Block ROM writes
             return;
         }
+    }
+
+    if (addr == 0xFF70) {
+        wram_bnk_no = std::max(1, (value&0x7));
     }
 
     // Joypad registers
@@ -229,14 +232,14 @@ byte * memoryMap(word addr)
         case 0x1000:
         case 0x2000:
         case 0x3000:
-            return &rom[addr];
+            return &rom[0][addr];
         // Rom bank 1..n
         // TODO: more than bank 1
         case 0x4000:
         case 0x5000:
         case 0x6000:
         case 0x7000:        
-            return &rom_bnk[rom_bnk_no][addr&0x3FFF];
+            return &rom[rom_bnk_no][addr&0x3FFF];
         // Cart ram
         case 0xA000:
         case 0xB000:
@@ -251,11 +254,12 @@ byte * memoryMap(word addr)
             }
         // Working ram
         case 0xC000:
+            return &wram[0][addr&0x1FFF];
         case 0xD000:
-            return &wram[addr&0x1FFF];
+            return &wram[wram_bnk_no][addr&0x1FFF];
         // Shadow working ram
         case 0xE000:
-            return &wram[addr&0xFFF];
+            return &wram[0][addr&0xFFF];
         // Upper bound of Shadow Working ram
         case 0xF000:
      
@@ -289,7 +293,6 @@ byte * memoryMap(word addr)
                     }
                 }
 
-                //assert(2==0);
                 return &unmapped;
             }
 
@@ -306,10 +309,10 @@ byte * memoryMap(word addr)
             
             return &unmapped;
             // TODO: move to error handler
-            printf("Error: memory could not be mapped: %x", addr);
+            Log("Error: memory could not be mapped", ERROR);
             exit(1);
         default:
-            printf("Error: memory could not be mapped: %x", addr);
+            Log("Error: memory could not be mapped", ERROR);
             exit(1);
     }
 }

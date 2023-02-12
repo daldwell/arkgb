@@ -149,11 +149,14 @@ void loadRom(const char * rmt)
     Log(buf, INFO);
 
     // Read bank 0 and 1 - all carts have these banks
-    fileRead(&rom[0], sizeof(byte), 0x4000, romFile);
-    fileRead(&rom_bnk[0][0], sizeof(byte), 0x4000, romFile);
+    fileRead(&rom[0][0], sizeof(byte), 0x4000, romFile);
+    fileRead(&rom[1][0], sizeof(byte), 0x4000, romFile);
 
     // Set up rom header
-    romHeader = (RomHeader*)(&rom[0]+0x104);
+    romHeader = (RomHeader*)(&rom[0][0]+0x104);
+
+    sprintf(buf, "Cart type: %x", romHeader->cartType);
+    Log(buf, INFO);
 
     // Load rom
     switch (romHeader->cartType) {
@@ -166,8 +169,8 @@ void loadRom(const char * rmt)
         case 0x1b:     // Handle MBC 5
 
             // Read all banks
-            for (int i = 1; i < (0x2 << romHeader->romSize)-1; i++) {
-                fileRead(&rom_bnk[i][0], sizeof(byte), 0x4000, romFile);
+            for (int i = 2; i < (0x2 << romHeader->romSize); i++) {
+                fileRead(&rom[i][0], sizeof(byte), 0x4000, romFile);
             }
             break;
         default:
