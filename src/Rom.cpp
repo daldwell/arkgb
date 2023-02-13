@@ -148,7 +148,6 @@ void RomComponent::Load(const char * rmt)
 
     // Read bank 0 and 1 - all carts have these banks
     fileRead(&rom[0][0], sizeof(byte), 0x4000, romFile);
-    fileRead(&rom[1][0], sizeof(byte), 0x4000, romFile);
 
     // Set up rom header
     romHeader = (RomHeader*)(&rom[0][0]+0x104);
@@ -179,10 +178,10 @@ void RomComponent::Load(const char * rmt)
     }
 
     // Read all ROM banks
-    if (romHeader->cartType != 0) {
-        for (int i = 2; i < (0x2 << romHeader->romSize); i++) {
-            fileRead(&rom[i][0], sizeof(byte), 0x4000, romFile);
-        }
+    int bankSize = (0x2 << romHeader->romSize)-1;
+    printf("BANK SIZE  %x %x\n", romHeader->romSize, bankSize);
+    for (int i = 1; i < (0x2 << romHeader->romSize); i++) {
+        fileRead(&rom[i][0], sizeof(byte), 0x4000, romFile);
     }
  
     // Load ram

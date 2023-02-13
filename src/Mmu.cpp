@@ -14,9 +14,9 @@
 #include "GUnit.h"
 #include "Logger.h"
 
-byte vram[1][0x2000]; 
+byte vram[2][0x2000]; 
 byte vram_bnk_no;
-byte wram[0x7][0x1000]; 
+byte wram[8][0x1000]; 
 byte wram_bnk_no = 1;
 byte hram[0x100]; 
 byte cram[0x100]; 
@@ -29,10 +29,27 @@ void MmuComponent::EventHandler(SDL_Event * e)
 
 byte MmuComponent::PeekByte(word addr)
 {
+
+    switch (addr&0xF000)
+    {
+        // Working ram
+        case 0xC000:
+            return wram[0][addr&0xFFF];
+        case 0xD000:
+            return wram[wram_bnk_no][addr&0xFFF];
+        // Shadow working ram
+        case 0xE000:
+            return wram[0][addr&0xFFF];
+    }
+
     // ROM
     if (romComponent.MemoryMapped(addr)) {
         //printf("PEEK ROM %x\n", addr);
         return romComponent.PeekByte(addr);
+    }
+
+    if (addr == 0xFF70) {
+        return wram_bnk_no;
     }
 
     // Joypad registers
@@ -66,6 +83,21 @@ byte MmuComponent::PeekByte(word addr)
 void MmuComponent::PokeByte(word addr, byte value)
 { 
 
+    switch (addr&0xF000)
+    {
+        // Working ram
+        case 0xC000:
+            wram[0][addr&0xFFF] = value;
+            return;
+        case 0xD000:
+            wram[wram_bnk_no][addr&0xFFF] = value;
+            return;
+        // Shadow working ram
+        case 0xE000:
+            wram[0][addr&0xFFF] = value;
+            return;
+    }
+
     // ROM
     if (romComponent.MemoryMapped(addr)) {
         romComponent.PokeByte(addr, value);
@@ -74,6 +106,7 @@ void MmuComponent::PokeByte(word addr, byte value)
 
     if (addr == 0xFF70) {
         wram_bnk_no = std::max(1, (value&0x7));
+        return;
     }
 
     // Joypad registers
@@ -143,16 +176,7 @@ byte * memoryMap(word addr)
 {
     switch (addr&0xF000)
     {
-        // Working ram
-        case 0xC000:
-            return &wram[0][addr&0x1FFF];
-        case 0xD000:
-            return &wram[wram_bnk_no][addr&0x1FFF];
-        // Shadow working ram
-        case 0xE000:
-            return &wram[0][addr&0xFFF];
         case 0xF000:
-     
             //TODO: sound, IO registers
             if (addr >= 0xFEA0 && addr <= 0xFF3F) {
 

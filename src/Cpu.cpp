@@ -20,7 +20,7 @@ void CpuComponent::EventHandler(SDL_Event * e)
 void CpuComponent::PokeByte(word addr, byte value)
 {
     if (addr == 0xFF4D) {
-        doubleSpeed = (value == 1 ? true : false);
+        doubleSpeed = (value&0x1 == 1 ? true : false);
     }
 }
 
