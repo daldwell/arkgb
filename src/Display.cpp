@@ -44,9 +44,6 @@ const int BG_X_FLIP = 1<<5;
 const int BG_BANK = 1<<3;
 const int BG_PALETTE = 0x7;
 
-Sprite oamTable[40];
-struct LcdRegister lcdRegs;
-int displayCycles;
 byte bgWinBuffer[256];
 int sprBuffer[256];
 int dmaCounter = 160;
@@ -78,6 +75,25 @@ void DisplayComponent::EventHandler(SDL_Event * e)
 
 byte DisplayComponent::PeekByte(word addr) 
 {
+
+    switch(addr)
+    {
+        case 0xFF51:
+            // High byte
+            return hdmaRegs.src>>8;
+        case 0xFF52:
+            // Low byte
+            return hdmaRegs.src&0xFF;
+        case 0xFF53:
+            // High byte
+            return hdmaRegs.dst>>8;
+        case 0xFF54:
+            // Low byte
+            return hdmaRegs.dst&0xFF;
+        case 0xFF55:
+            return hdmaRegs.status;
+    }
+
     if (addr >= 0xFE00 && addr <= 0xFE9F) {
         return *((byte*)&oamTable + (addr&0xFF));
     }
@@ -119,6 +135,30 @@ byte DisplayComponent::PeekByte(word addr)
 
 void DisplayComponent::PokeByte(word addr, byte value)
 {
+
+    switch(addr)
+    {
+        case 0xFF51:
+            // High byte
+            hdmaRegs.src = (word)(value<<8) + (value&0xFF);
+            return;
+        case 0xFF52:
+            // Low byte
+            hdmaRegs.src = (value&0xFF00) + (value&0xF0);
+            return;
+        case 0xFF53:
+            // High byte (top 3 bits are ignored)
+            hdmaRegs.dst = (word)(value<<8) + (value&0x1F);
+            return;
+        case 0xFF54:
+            // Low byte
+            hdmaRegs.dst = (value&0xFF00) + (value&0xF0);
+            return;
+        case 0xFF55:
+            hdmaRegs.status = value;
+            return;
+    }
+
     if (addr >= 0xFE00 && addr <= 0xFE9F) {
         *((byte*)&oamTable + (addr&0xFF)) = value;
         return;
@@ -262,7 +302,7 @@ void DisplayComponent::DrawSpritesRow(byte y)
         tileYOffset = (spr.attr&OAM_Y_FLIP ? ( tileSize - (y - yPos) ) : (y - yPos)) * 2;
 
         // CGB requires a bank switch for the correct tile data
-        byte sprBnk = cgbProfile ? (spr.attr & 0x8) : 0; 
+        byte sprBnk = (cgbProfile && (spr.attr & 0x8)) ? 1 : 0; 
         mmu.PokeByte(0xFF4F, sprBnk);
 
         tileRow = mmu.PeekWord(bp + tileYOffset + (spr.tIdx*tileIndex));
@@ -536,6 +576,17 @@ void DisplayComponent::Cycle()
 
 bool DisplayComponent::MemoryMapped(word addr)
 {
+    // HDMA registers
+    switch(addr)
+    {
+        case 0xFF51:
+        case 0xFF52:
+        case 0xFF53:
+        case 0xFF54:
+        case 0xFF55:
+            return true;
+    }
+
     // OAM table
     if (addr >= 0xFE00 && addr <= 0xFE9F) {
         return true;
@@ -571,5 +622,18 @@ bool DisplayComponent::MemoryMapped(word addr)
 
 void DisplayComponent::Reset()
 {
-    // Not implemented
-}
+    displayCycles = 200;
+
+    // Display regs
+    lcdRegs.LCDC = 0x91; 
+    lcdRegs.STAT = 0x85;
+    lcdRegs.SCY = 0x0;
+    lcdRegs.SCX = 0x0;
+    lcdRegs.LY = 0x91;
+    lcdRegs.LYC = 0x0;
+    lcdRegs.DMA = 0xFF;
+    lcdRegs.BGP = 0xFC;
+    lcdRegs.OBP0 = 0x0;
+    lcdRegs.OBP1 = 0x0;
+    lcdRegs.WX = 0x0;
+    lcdRegs.WY = 0x0;}

@@ -35,6 +35,13 @@ struct Pixel
     byte b;
 };
 
+struct HdmaRegister
+{
+    word src;
+    word dst;
+    byte status;
+};
+
 class DisplayComponent : public GComponent
 {
     public:
@@ -52,10 +59,9 @@ class DisplayComponent : public GComponent
         void DrawSpritesRow(byte);
         void DrawBackgroundRow(byte);
         void DrawWindowRow(byte);
+        LcdRegister lcdRegs;
+        HdmaRegister hdmaRegs;
+        Sprite oamTable[40];
+        int displayCycles;
         friend class MmuComponent;
 };
-
-extern int displayCycles;
-
-extern struct LcdRegister lcdRegs;
-extern struct Sprite oamTable[40];

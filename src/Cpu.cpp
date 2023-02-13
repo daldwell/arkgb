@@ -48,7 +48,6 @@ void CpuComponent::Cycle()
 void CpuComponent::Reset()
 {
     cpuCycles = 0;
-    displayCycles = 200;
 
     // DMG startup values
     // TODO: profiles for other GB types
@@ -80,19 +79,5 @@ void CpuComponent::Reset()
     // Interrupt
     IFRegister = 0xE1;
     IERegister = 0x0;
-
-    // Display
-    lcdRegs.LCDC = 0x91; 
-    lcdRegs.STAT = 0x85;
-    lcdRegs.SCY = 0x0;
-    lcdRegs.SCX = 0x0;
-    lcdRegs.LY = 0x91;
-    lcdRegs.LYC = 0x0;
-    lcdRegs.DMA = 0xFF;
-    lcdRegs.BGP = 0xFC;
-    lcdRegs.OBP0 = 0x0;
-    lcdRegs.OBP1 = 0x0;
-    lcdRegs.WX = 0x0;
-    lcdRegs.WY = 0x0;
 
 }
