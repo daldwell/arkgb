@@ -161,14 +161,15 @@ void RomComponent::Load(const char * rmt)
             mbc = new Mbc0;
             break;
         case 0x01:     // Handle MBC 1
+        case 0x03:
             mbc = new Mbc1;
             break;
-        case 0x03:
         case 0x10:     // Handle MBC 3
+        case 0x13:
             mbc = new Mbc3;
             break;
-        case 0x13:
         case 0x1b:     // Handle MBC 5
+        case 0x1e:     // Handle MBC 5
             mbc = new Mbc5;
             break;
         default:
@@ -192,6 +193,7 @@ void RomComponent::Load(const char * rmt)
         case 0x10:     // Handle MBC 3
         case 0x13:
         case 0x1b:     // Handle MBC 5
+        case 0x1e:     // Handle MBC 5
             // Read battery backed RAM
             strcpy(ramName, romName);
             changeExtension(ramName, "sav");

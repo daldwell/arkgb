@@ -80,18 +80,18 @@ byte DisplayComponent::PeekByte(word addr)
     {
         case 0xFF51:
             // High byte
-            return hdmaRegs.src>>8;
+            return vdmaRegs.src>>8;
         case 0xFF52:
             // Low byte
-            return hdmaRegs.src&0xFF;
+            return vdmaRegs.src&0xFF;
         case 0xFF53:
             // High byte
-            return hdmaRegs.dst>>8;
+            return vdmaRegs.dst>>8;
         case 0xFF54:
             // Low byte
-            return hdmaRegs.dst&0xFF;
+            return vdmaRegs.dst&0xFF;
         case 0xFF55:
-            return hdmaRegs.status;
+            return vdmaRegs.init;
     }
 
     if (addr >= 0xFE00 && addr <= 0xFE9F) {
@@ -140,22 +140,31 @@ void DisplayComponent::PokeByte(word addr, byte value)
     {
         case 0xFF51:
             // High byte
-            hdmaRegs.src = (word)(value<<8) + (value&0xFF);
+            vdmaRegs.src = (word)(value<<8) + (vdmaRegs.src&0xF0);
             return;
         case 0xFF52:
             // Low byte
-            hdmaRegs.src = (value&0xFF00) + (value&0xF0);
+            vdmaRegs.src = (vdmaRegs.src&0xFF00) + (value&0xF0);
             return;
         case 0xFF53:
             // High byte (top 3 bits are ignored)
-            hdmaRegs.dst = (word)(value<<8) + (value&0x1F);
+            vdmaRegs.dst = (word)( (value&0x1F) <<8 ) + (vdmaRegs.dst&0xF0);
             return;
         case 0xFF54:
             // Low byte
-            hdmaRegs.dst = (value&0xFF00) + (value&0xF0);
+            vdmaRegs.dst = (vdmaRegs.dst&0x1F00) + (value&0xF0);
             return;
         case 0xFF55:
-            hdmaRegs.status = value;
+            // Commence HDMA transfer
+            vdmaRegs.init = value&0x7; // Store lower bits, higher bit is used to check DMA type, then discarded
+
+            // Check high bit to enable General/Hblank DMA
+            if (value&0x8) {
+                vdmaRegs.status = HBL;
+            } else {
+                vdmaRegs.status = GEN;
+            }
+
             return;
     }
 
@@ -229,7 +238,7 @@ void DisplayComponent::DrawTileRow(byte tIdx, int x, int y, byte tileYOffset, by
     bool cgbProfile = (profile == CGB);
 
     // CGB requires a bank switch for the correct tile data
-    byte sprBnk = (cgbProfile) ? (tAttr & 0x8) : 0; 
+    byte sprBnk = (cgbProfile && (tAttr & 0x8)) ? 1 : 0; 
     mmu.PokeByte(0xFF4F, sprBnk);
 
     tileRow = mmu.PeekWord(bp + tileYOffset + (tIdx*tileIndex));
@@ -383,10 +392,10 @@ void DisplayComponent::DrawBackgroundRow(byte y)
 
     byte scrollOffset = lcdRegs.SCX / 8;
 
-    // Set to bank 0 for tile offset
-    mmu.PokeByte(0xFF4F, 0x0);
-
     for (int i = 0; i < 32; i++) {
+        // Set to bank 0 for tile offset
+        mmu.PokeByte(0xFF4F, 0x0);
+
         sbyte tIdx = mmu.PeekByte(tileMapBase + tilesRow + (i + scrollOffset) % 32);
         byte tAttr = 0;
 
@@ -429,10 +438,10 @@ void DisplayComponent::DrawWindowRow(byte y)
     // Draw a single horizontal (x) row across the screen
     word tilesRow = (((y-lcdRegs.WY) / tileHeight) * 32);
 
-    // Set to bank 0 for tile offset
-    mmu.PokeByte(0xFF4F, 0x0);
-
     for (int i = 0; i < 32; i++) {
+        // Set to bank 0 for tile offset
+        mmu.PokeByte(0xFF4F, 0x0);
+
         sbyte tIdx = mmu.PeekByte(tileMapBase + tilesRow + (i) % 32);
 
         // Get CGB attributes
@@ -456,7 +465,34 @@ void DisplayComponent::Cycle()
         return;
     }
 
-    // Perform DMA transfer if register is set
+    // Perform VRAM DMA transfer if register is set
+    // TODO: make this cycle-accurate for DMG/CGB modes
+    if (vdmaRegs.status == GEN) {
+        halt = true; // CPU is halted for duration of transfer
+
+        // Transfer complete - allow one more cycle as the init register at 0 counts for 16 bytes
+        if (vdmaRegs.init == 0) {
+            vdmaRegs.status = OFF;
+        }
+
+        int begin = vdmaRegs.count << 0x4;
+        for (int i = 0; i < 0x10; i++) {
+            mmu.PokeByte((vdmaRegs.dst+0x8000) + (begin+i), mmu.PeekByte(vdmaRegs.src + (begin+i)));
+        }
+
+        // Adjust counts if we are still going
+        if (vdmaRegs.status != OFF) {
+            vdmaRegs.count++;
+            vdmaRegs.init--;
+        } else {
+            halt = false;
+            vdmaRegs.init = 0xFF;
+            vdmaRegs.count = 0;
+        }
+
+    }
+
+    // Perform OAM DMA transfer if register is set
     if (dmaSrc && dmaCounter == 160) {
         dmaCounter = 0;
     }
@@ -636,4 +672,15 @@ void DisplayComponent::Reset()
     lcdRegs.OBP0 = 0x0;
     lcdRegs.OBP1 = 0x0;
     lcdRegs.WX = 0x0;
-    lcdRegs.WY = 0x0;}
+    lcdRegs.WY = 0x0;
+
+    // hmda regs
+    vdmaRegs.init = 0xFF;
+    vdmaRegs.status = OFF;
+    vdmaRegs.count = 0;
+}
+
+VdmaStatus DisplayComponent::GetVdmaStatus()
+{
+    return vdmaRegs.status;
+}

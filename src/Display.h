@@ -35,11 +35,20 @@ struct Pixel
     byte b;
 };
 
-struct HdmaRegister
+enum VdmaStatus
+{
+    OFF = 0,
+    GEN,
+    HBL
+};
+
+struct VdmaRegister
 {
     word src;
     word dst;
-    byte status;
+    byte init;
+    int count;
+    VdmaStatus status;
 };
 
 class DisplayComponent : public GComponent
@@ -52,6 +61,7 @@ class DisplayComponent : public GComponent
         byte PeekByte(word) override;
         void Cycle() override;
         void Reset() override;
+        VdmaStatus GetVdmaStatus();
     protected:
         bool MemoryMapped(word);
         int GetColorFromPalette(Pixel);
@@ -60,7 +70,7 @@ class DisplayComponent : public GComponent
         void DrawBackgroundRow(byte);
         void DrawWindowRow(byte);
         LcdRegister lcdRegs;
-        HdmaRegister hdmaRegs;
+        VdmaRegister vdmaRegs;
         Sprite oamTable[40];
         int displayCycles;
         friend class MmuComponent;
