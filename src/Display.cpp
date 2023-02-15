@@ -44,6 +44,16 @@ const int BG_X_FLIP = 1<<5;
 const int BG_BANK = 1<<3;
 const int BG_PALETTE = 0x7;
 
+const int MODE0_HBLANK = 0;
+const int MODE1_VBLANK = 0x1;
+const int MODE2_OAMSCAN = 0x2;
+const int MODE3_DRAW = 0x3;
+
+const int MODE0_CYCLES = 204;
+const int MODE1_CYCLES = 456;
+const int MODE2_CYCLES = 80;
+const int MODE3_CYCLES = 172;
+
 byte bgWinBuffer[256];
 int sprBuffer[256];
 int dmaCounter = 160;
@@ -156,11 +166,20 @@ void DisplayComponent::PokeByte(word addr, byte value)
             return;
         case 0xFF55:
             // Commence HDMA transfer
-            vdmaRegs.init = value&0x7; // Store lower bits, higher bit is used to check DMA type, then discarded
+            vdmaRegs.init = value&0x7f; // Store lower bits, higher bit is used to check DMA type, then discarded
+
+            // Stop/restart HDMA transfer if active
+            if (vdmaRegs.status == HBL || vdmaRegs.status == HPS) {
+                if (! (value&0x80) ) {
+                    vdmaRegs.init |= 0x80; // Stop copy
+                    vdmaRegs.status = OFF;
+                }
+                return;
+            }
 
             // Check high bit to enable General/Hblank DMA
-            if (value&0x8) {
-                vdmaRegs.status = HBL;
+            if (value&0x80) {
+                vdmaRegs.status = ( (lcdRegs.STAT & 0x3) == MODE0_HBLANK ) ? HBL : HPS; // Start off paused, will awaken before next Hblank
             } else {
                 vdmaRegs.status = GEN;
             }
@@ -455,158 +474,207 @@ void DisplayComponent::DrawWindowRow(byte y)
     }
 }
 
-void DisplayComponent::Cycle()
+void DisplayComponent::PerformVDMA()
 {
-    word dmaSrc = (word)lcdRegs.DMA << 8;
-    int cycles = cpuCycles >> doubleSpeed;
-
-    // Exit if LCD is disabled
-    if (!(lcdRegs.LCDC&LCDC_PPU_ENABLE_MASK)) {
+    // We do this every other cycle for doublespeed mode as VDMA is tied to the base clock rate
+    vdmaRegs.cycles += (4 >> doubleSpeed);
+    if (vdmaRegs.cycles != 4) {
+        return;
+    }
+    vdmaRegs.cycles = 0;
+    
+    // Skip if not active, or HDMA has paused for the HBlank period
+    if (vdmaRegs.status == OFF || vdmaRegs.status == HPS) {
         return;
     }
 
-    // Perform VRAM DMA transfer if register is set
-    // TODO: make this cycle-accurate for DMG/CGB modes
-    if (vdmaRegs.status == GEN) {
-        halt = true; // CPU is halted for duration of transfer
+    halt = true; // CPU is halted for duration of transfer
 
-        // Transfer complete - allow one more cycle as the init register at 0 counts for 16 bytes
-        if (vdmaRegs.init == 0) {
-            vdmaRegs.status = OFF;
-        }
+    mmu.PokeByte((vdmaRegs.dst+0x8000) + (vdmaRegs.count), mmu.PeekByte(vdmaRegs.src + (vdmaRegs.count)));
 
-        int begin = vdmaRegs.count << 0x4;
-        for (int i = 0; i < 0x10; i++) {
-            mmu.PokeByte((vdmaRegs.dst+0x8000) + (begin+i), mmu.PeekByte(vdmaRegs.src + (begin+i)));
-        }
+    // Increment the count, do not make further adjustments until 16 bytes have been transferred.
+    vdmaRegs.count++;
+    if (vdmaRegs.count % 0x10) {
+        return;
+    } 
 
-        // Adjust counts if we are still going
-        if (vdmaRegs.status != OFF) {
-            vdmaRegs.count++;
-            vdmaRegs.init--;
-        } else {
+    // No more bytes left - VDMA Transfer complete
+    if (vdmaRegs.init == 0) {
+        vdmaRegs.status = OFF;
+    }
+
+    // Adjust counts if we are still going
+    if (vdmaRegs.status != OFF) {
+
+        // Decrement master count
+        vdmaRegs.init--;
+
+        // Pause hdma - only 16 bytes are transferred during a single hblank period
+        if (vdmaRegs.status == HBL) {
             halt = false;
-            vdmaRegs.init = 0xFF;
-            vdmaRegs.count = 0;
+            vdmaRegs.status = HPS;
         }
 
+    } else {
+        // All done, reset VDMA values
+        halt = false;
+        vdmaRegs.init = 0xFF;
+        vdmaRegs.count = 0;
     }
+}
 
-    // Perform OAM DMA transfer if register is set
-    if (dmaSrc && dmaCounter == 160) {
-        dmaCounter = 0;
-    }
+void DisplayComponent::Cycle()
+{
+    int modeCycles = 0;
+    word dmaSrc = (word)lcdRegs.DMA << 8;
+    //int cycles = cpuCycles;
 
-    if (dmaCounter < 160) {
-        mmu.PokeByte(0xFE00 + dmaCounter, mmu.PeekByte(dmaSrc+dmaCounter));
-        dmaCounter++;
-        if (dmaCounter == 160) lcdRegs.DMA = 0;
-    }
-
-    displayCycles += cycles;
-
-    switch (lcdRegs.STAT & 0x3)
+    for (int cycles = 4; cycles <= cpuCycles; cycles += 4)
     {
-        //TODO: enums and define mode flag masks
-        case 0:
-            if (displayCycles >= 204) {
-                displayCycles -= 204;
-                lcdRegs.LY++;
+        // Perform VRAM DMA transfer if register is set
+        PerformVDMA();
+        
+        // Perform OAM DMA transfer if register is set
+        if (dmaSrc && dmaCounter == 160) {
+            dmaCounter = 0;
+        }
 
-                if (lcdRegs.LY == lcdRegs.LYC)
-                    lycEnable = true;
-
-                if (lcdRegs.LY > 143) {
-
-                    // TODO: drawing routines
-                    gwindow.RefreshWindow();
-                    gwindow.ClearSurface();
-
-                    // Turn on vblank mode and enable vblank interrupt
-                    lcdRegs.STAT &= ~(0x3);
-                    lcdRegs.STAT |= 0x1;
-                    IFRegister |= vblank_flag;
-
-                    // Check if we can enable vblank stat interrupt 
-                    if (lcdRegs.STAT & STAT_MODE1) {
-                        IFRegister |= lcd_flag;
-                    }
-
-                } else {
-                    lcdRegs.STAT &= ~(0x3);
-                    lcdRegs.STAT |= 0x2;
-
-                    // Check if we can enable OAM interrupt 
-                    if (lcdRegs.STAT & STAT_MODE2) {
-                        IFRegister |= lcd_flag;
-                    }
-                }
+        if (dmaCounter < 160) {
+            mmu.PokeByte(0xFE00 + dmaCounter, mmu.PeekByte(dmaSrc+dmaCounter));
+            dmaCounter++;
+            if (dmaCounter == 160) {
+                lcdRegs.DMA = 0;
+                dmaSrc = 0;
             }
-            break;
-        case 2:
-            if (displayCycles >= 80) {
-                displayCycles -= 80;
-                lcdRegs.STAT &= ~(0x3);
-                lcdRegs.STAT |= 0x3;
-            }
-            break;
-        case 3:
-            if (displayCycles >= 172) {
+        }
 
-                // Vram bank is trashed during screen refresh
-                byte tmp_vram_bnk = mmu.PeekByte(0xFF4F);
+        // Exit if LCD is disabled
+        if (!(lcdRegs.LCDC&LCDC_PPU_ENABLE_MASK)) {
+            continue;
+        }
 
-                DrawBackgroundRow(lcdRegs.LY);
-                DrawWindowRow(lcdRegs.LY);
-                DrawSpritesRow(lcdRegs.LY);
-                displayCycles -= 172;
-                lcdRegs.STAT &= ~(0x3);
+        displayCycles += 4;
 
-                // Restore original value when done
-                mmu.PokeByte(0xFF4F, tmp_vram_bnk);
+        switch (lcdRegs.STAT & 0x3)
+        {
+            //TODO: enums and define mode flag masks
+            case MODE0_HBLANK:
+                modeCycles = MODE0_CYCLES << doubleSpeed;
+                // Execute HDMA cycle here if flag is enabled
+                //PerformVDMA();
 
-                // Check if we can enable hblank stat interrupt 
-                if (lcdRegs.STAT & STAT_MODE0) {
-                    IFRegister |= lcd_flag;
-                }
-            }
-            break;
-        case 1:
-            if (displayCycles >= 456) {
-                displayCycles -= 456;
+                if (displayCycles >= modeCycles) {
+                    displayCycles -= modeCycles;
+                    lcdRegs.LY++;
 
-                if (lcdRegs.LY == 0) {
-                    //displayCycles = 0;
-                    lcdRegs.STAT &= ~(0x3);
-                    lcdRegs.STAT |= 0x2;
-                    lcdRegs.LY = 0;
-
-                    // Check if we can enable OAM interrupt 
-                    if (lcdRegs.STAT & STAT_MODE2) {
-                        IFRegister |= lcd_flag;
-                    }
-                    break;
-                }
-
-                lcdRegs.LY++;
-
-                // LY gets treated as zero at 153 (apparently an undocumented quirk)
-                if (lcdRegs.LY == 153) {
-                    lcdRegs.LY = 0;
                     if (lcdRegs.LY == lcdRegs.LYC)
-                    lycEnable = true;
+                        lycEnable = true;
+
+                    if (lcdRegs.LY > 143) {
+
+                        // TODO: drawing routines
+                        gwindow.RefreshWindow();
+                        gwindow.ClearSurface();
+
+                        // Turn on vblank mode and enable vblank interrupt
+                        lcdRegs.STAT &= ~(MODE3_DRAW);
+                        lcdRegs.STAT |= MODE1_VBLANK;
+                        IFRegister |= vblank_flag;
+
+                        // Check if we can enable vblank stat interrupt 
+                        if (lcdRegs.STAT & STAT_MODE1) {
+                            IFRegister |= lcd_flag;
+                        }
+
+                    } else {
+                        lcdRegs.STAT &= ~(MODE3_DRAW);
+                        lcdRegs.STAT |= MODE2_OAMSCAN;
+
+                        // Check if we can enable OAM interrupt 
+                        if (lcdRegs.STAT & STAT_MODE2) {
+                            IFRegister |= lcd_flag;
+                        }
+                    }
                 }
-            }
+                break;
+            case MODE2_OAMSCAN:
+                modeCycles = MODE2_CYCLES << doubleSpeed;
+                if (displayCycles >= modeCycles) {
+                    displayCycles -= modeCycles;
+                    lcdRegs.STAT &= ~(MODE3_DRAW);
+                    lcdRegs.STAT |= MODE3_DRAW;
+                }
+                break;
+            case MODE3_DRAW:
+                modeCycles = MODE3_CYCLES << doubleSpeed;
+                if (displayCycles >= modeCycles) {
 
-            break;
+                    // Vram bank is trashed during screen refresh
+                    byte tmp_vram_bnk = mmu.PeekByte(0xFF4F);
+
+                    DrawBackgroundRow(lcdRegs.LY);
+                    DrawWindowRow(lcdRegs.LY);
+                    DrawSpritesRow(lcdRegs.LY);
+                    displayCycles -= modeCycles;
+                    lcdRegs.STAT &= ~(MODE3_DRAW);
+
+                    // Restore original value when done
+                    mmu.PokeByte(0xFF4F, tmp_vram_bnk);
+
+                    // Check if we can enable hblank stat interrupt 
+                    if (lcdRegs.STAT & STAT_MODE0) {
+                        IFRegister |= lcd_flag;
+                    }
+
+                    // Enable HDMA if flag is paused
+                    if (vdmaRegs.status == HPS) {
+                        vdmaRegs.status = HBL;
+                    }
+                }
+                break;
+            case MODE1_VBLANK:
+                modeCycles = MODE1_CYCLES << doubleSpeed;
+                if (displayCycles >= modeCycles) {
+                    displayCycles -= modeCycles;
+
+                    if (lcdRegs.LY == 0) {
+                        //displayCycles = 0;
+                        lcdRegs.STAT &= ~(MODE3_DRAW);
+                        lcdRegs.STAT |= MODE2_OAMSCAN;
+                        lcdRegs.LY = 0;
+
+                        // Check if we can enable OAM interrupt 
+                        if (lcdRegs.STAT & STAT_MODE2) {
+                            IFRegister |= lcd_flag;
+                        }
+
+                        // Enable HDMA if flag is paused
+                        if (vdmaRegs.status == HPS) {
+                            vdmaRegs.status = HBL;
+                        }
+
+                        break;
+                    }
+
+                    lcdRegs.LY++;
+
+                    // LY gets treated as zero at 153 (apparently an undocumented quirk)
+                    if (lcdRegs.LY == 153) {
+                        lcdRegs.LY = 0;
+                        if (lcdRegs.LY == lcdRegs.LYC)
+                        lycEnable = true;
+                    }
+                }
+
+                break;
+        }
+
+        // Check if we can enable LYC:LY interrupt 
+        if ((lcdRegs.STAT & STAT_LYCLC) && lycEnable) {
+            IFRegister |= lcd_flag;
+            lycEnable = false;
+        }
     }
-
-    // Check if we can enable LYC:LY interrupt 
-    if ((lcdRegs.STAT & STAT_LYCLC) && lycEnable) {
-        IFRegister |= lcd_flag;
-        lycEnable = false;
-    }
-
 
 }
 

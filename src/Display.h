@@ -39,7 +39,8 @@ enum VdmaStatus
 {
     OFF = 0,
     GEN,
-    HBL
+    HBL,
+    HPS // Hblank paused
 };
 
 struct VdmaRegister
@@ -48,6 +49,7 @@ struct VdmaRegister
     word dst;
     byte init;
     int count;
+    int cycles;
     VdmaStatus status;
 };
 
@@ -69,6 +71,7 @@ class DisplayComponent : public GComponent
         void DrawSpritesRow(byte);
         void DrawBackgroundRow(byte);
         void DrawWindowRow(byte);
+        void PerformVDMA();
         LcdRegister lcdRegs;
         VdmaRegister vdmaRegs;
         Sprite oamTable[40];
