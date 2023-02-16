@@ -28,11 +28,20 @@ struct Sprite
     byte attr;
 };
 
-struct Pixel
+
+struct RGB
 {
     byte r;
     byte g;
     byte b;
+};
+
+struct Pixel
+{
+    byte cIdx;
+    RGB rgb;
+    int priority;
+    bool BGWinOverOAM;
 };
 
 enum VdmaStatus
@@ -66,11 +75,12 @@ class DisplayComponent : public GComponent
         VdmaStatus GetVdmaStatus();
     protected:
         bool MemoryMapped(word);
-        int GetColorFromPalette(Pixel);
+        int GetColorFromPalette(RGB);
+        int BackgroundFIFO(int, int);
         void DrawTileRow(byte, int, int, byte, byte, word, byte);
         void DrawSpritesRow(byte);
         void DrawBackgroundRow(byte);
-        void DrawWindowRow(byte);
+        void RenderFrame(byte);
         void PerformVDMA();
         LcdRegister lcdRegs;
         VdmaRegister vdmaRegs;

@@ -54,13 +54,13 @@ const int MODE1_CYCLES = 456;
 const int MODE2_CYCLES = 80;
 const int MODE3_CYCLES = 172;
 
-byte bgWinBuffer[256];
-int sprBuffer[256];
+Pixel bgWinBuffer[160];
+Pixel sprBuffer[160];
 int dmaCounter = 160;
 bool lycEnable;
 
 // DMG palette (this is hardcoded)
-Pixel dmgPal[4] = {
+RGB dmgPal[4] = {
     {0xFF, 0xFF, 0xFF},
     {0xC0, 0xC0, 0xC0},
     {0x60, 0x60, 0x60},
@@ -239,56 +239,106 @@ void DisplayComponent::PokeByte(word addr, byte value)
     *((byte*)&lcdRegs + (addr&0xF)) = value;
 }
 
-int DisplayComponent::GetColorFromPalette(Pixel px)
+int DisplayComponent::GetColorFromPalette(RGB rgb)
 {
-    return gwindow.GetRGB(px.r, px.g, px.b);
+    return gwindow.GetRGB(rgb.r, rgb.g, rgb.b);
 }
 
-void DisplayComponent::DrawTileRow(byte tIdx, int x, int y, byte tileYOffset, byte iniPxl, word bpOffset, byte tAttr)
+void DisplayComponent::DrawBackgroundRow(byte y)
 {
-    word tileRow;
+    int tileX; // X coordinate of tile, between 0-31
+    int tileY; // Y coordinate of tile, between 0-255
+    bool addressMode =  lcdRegs.LCDC & LCDC_BG_WINDOW_TILE_DATA_MASK;
+    int tileMapAddr;
+    int tileDataAddr = 0x8000 + (addressMode ? 0x0 : 0x800);
+    word tileData;
+    bool cgbProfile = (profile == CGB);
     byte cIdx;
     int color;
-    int rx = 0;
-    Pixel px;
     byte palIndex;
     word palData;
-    word bp = 0x8000 + bpOffset;
-    bool cgbProfile = (profile == CGB);
+    int startingXPixel;
 
-    // CGB requires a bank switch for the correct tile data
-    byte sprBnk = (cgbProfile && (tAttr & 0x8)) ? 1 : 0; 
-    mmu.PokeByte(0xFF4F, sprBnk);
+    // Init background row buffer
+    for (int i = 0; i < 160; i++) {
+        bgWinBuffer[i].cIdx = 0x0;
+        bgWinBuffer[i].rgb = dmgPal[0];
+        bgWinBuffer[i].priority = 0;
+        bgWinBuffer[i].BGWinOverOAM = false;
+    }
 
-    tileRow = mmu.PeekWord(bp + tileYOffset + (tIdx*tileIndex));
-    rx = x;
-    for (int k = 7-iniPxl; k >= 0; k--) {
-        // Horizontal flip - read bits from other direction (CGB only)
-        int tileBit = ((tAttr&BG_X_FLIP) && cgbProfile) ? (tileWidth-1) - k : k;
-        
-        cIdx = tileRow & (0x100<<tileBit) ? 2 : 0;
-        cIdx += tileRow & (0x1<<tileBit) ? 1 : 0;
+    // Exit if window/background not enabled
+    if (!(lcdRegs.LCDC & LCDC_BG_WINDOW_ENABLE_MASK)) return;
 
-        if (cgbProfile) {
-            palIndex = (tAttr & 0x7) << 3;
-            palData = cgbBGPal[palIndex + (cIdx<<1) + 1] << 8;
-            palData += cgbBGPal[palIndex + (cIdx<<1)];
+    int x = 0;
+    while (x < 160) {
 
-            px.r = (palData & 0x1F) << 3;
-            px.g = ((palData>>5) & 0x1F) << 3;
-            px.b = ((palData>>10) & 0x1F) << 3;
+        // Are we drawing the window?
+        bool windowTile = (lcdRegs.LCDC & LCDC_WINDOW_ENABLE_MASK) && (x >= (lcdRegs.WX-0x7) && y >= lcdRegs.WY);
+
+        // Configure bg/window values
+        if (windowTile) {
+            tileX = ( (x-(lcdRegs.WX-0x7))/8 ) & 0x1F;
+            tileY = (y-lcdRegs.WY) & 0xFF;
+            tileMapAddr = (lcdRegs.LCDC & LCDC_WINDOW_TILE_MAP_MASK) ? 0x9C00 : 0x9800;
+            startingXPixel = 0;
         } else {
-            cIdx<<=1;
-            px = dmgPal[(lcdRegs.BGP>>cIdx & 0x3)];
+            tileX = ((lcdRegs.SCX + x)/8) & 0x1F;
+            tileY = (lcdRegs.SCY + y) & 0xFF;
+            tileMapAddr = (lcdRegs.LCDC & LCDC_BG_TILE_MAP_MASK) ? 0x9C00 : 0x9800;
+            startingXPixel = (x > 0) ? 0 : (lcdRegs.SCX & 0x7);
         }
 
-        color = GetColorFromPalette(px);
+        // Get tile map
+        // Set to bank 0 for tile offset
+        int tileMapOffset = tileMapAddr + tileX + ((tileY/8) << 5);
+        mmu.PokeByte(0xFF4F, 0x0);
 
-        gwindow.DrawPixel(rx, y, color);
-        // Keep track of BG/Win pixels, used to mask sprites later
-        // Colour index 0 is not tracked
-        if (!bgWinBuffer[rx] && cIdx) bgWinBuffer[rx] = cIdx;
-        rx ++;
+        // Index to tile data
+        byte tIdx = ( (sbyte)mmu.PeekByte(tileMapOffset) + (addressMode ? 0 : 0x80) );
+
+        // Get CGB attributes
+        // Requires a bank switch
+        mmu.PokeByte(0xFF4F, 0x1);
+        byte tAttr = mmu.PeekByte(tileMapOffset);
+
+        // Calculate tile Y offset, taking into account vertical flip bit (CGB only)
+        byte tileRow = tileY & 0x7;
+        if ((tAttr & BG_Y_FLIP) && cgbProfile ) tileRow = ((tileHeight-1) - tileRow);
+        tileRow <<= 1; // Multiply offset as tiles are 2 bytes long
+
+        // CGB requires a bank switch for the correct tile data
+        byte sprBnk = (cgbProfile && (tAttr & 0x8)) ? 1 : 0; 
+        mmu.PokeByte(0xFF4F, sprBnk);
+
+        // Get the tile pixel data
+        tileData = mmu.PeekWord(tileDataAddr + (tIdx << 4) + tileRow);
+
+        for (int k = 7-startingXPixel; k >= 0; k--) {
+            // Horizontal flip - read bits from other direction (CGB only)
+            int tileBit = ((tAttr&BG_X_FLIP) && cgbProfile) ? (tileWidth-1) - k : k;
+            
+            cIdx = tileData & (0x100<<tileBit) ? 2 : 0;
+            cIdx += tileData & (0x1<<tileBit) ? 1 : 0;
+
+            if (cgbProfile) {
+                palIndex = (tAttr & 0x7) << 3;
+                palData = cgbBGPal[palIndex + (cIdx<<1) + 1] << 8;
+                palData += cgbBGPal[palIndex + (cIdx<<1)];
+
+                bgWinBuffer[x].cIdx = cIdx;
+                bgWinBuffer[x].rgb.r = (palData & 0x1F) << 3;
+                bgWinBuffer[x].rgb.g = ((palData>>5) & 0x1F) << 3;
+                bgWinBuffer[x].rgb.b = ((palData>>10) & 0x1F) << 3;
+                bgWinBuffer[x].BGWinOverOAM = tAttr&BG_OAM_PRIORITY;
+            } else {
+                bgWinBuffer[x].cIdx = cIdx;
+                cIdx<<=1;
+                bgWinBuffer[x].rgb = dmgPal[(lcdRegs.BGP>>cIdx & 0x3)];
+                bgWinBuffer[x].BGWinOverOAM = false;  // flag does not exist for DMG
+            }
+            x++;
+        }
     }
 }
 
@@ -302,17 +352,17 @@ void DisplayComponent::DrawSpritesRow(byte y)
     int rx = 0;
     word bp = 0x8000;
     bool hasPriority;
-    Pixel px;
     byte palIndex;
     word palData;
     byte tileSize = (lcdRegs.LCDC&LCDC_SPRITE_SIZE_MASK) ? 15 : 7;
     bool cgbProfile = (profile == CGB);
 
-    // For the sprite buffer we use two masking values:
-    // 0xFF means no pixel is occupied at all by a sprite
-    // 0xFE means a transparent sprite pixel. NOTE - any sprite attempting to draw over a "background" sprite that has priority will also have their pixels masked.
-    for (int i = 0; i < 256; i++) {
-        sprBuffer[i] = 0xF;
+    // Init sprite pixel buffer
+    for (int i = 0; i < 160; i++) {
+        sprBuffer[i].cIdx = 0x0;
+        sprBuffer[i].rgb = dmgPal[0];
+        sprBuffer[i].priority = 0xFFF;
+        sprBuffer[i].BGWinOverOAM = false;
     }
 
     for (int i = 0; i < 40; i++) {
@@ -334,8 +384,15 @@ void DisplayComponent::DrawSpritesRow(byte y)
         mmu.PokeByte(0xFF4F, sprBnk);
 
         tileRow = mmu.PeekWord(bp + tileYOffset + (spr.tIdx*tileIndex));
-        rx = xPos;
+        rx = xPos-1;
         for (int k = 7; k >= 0; k--) {
+
+            rx ++;
+
+            // Sprite pixel outside scanline
+            if (rx < 0 || rx >= 160) {
+                continue;
+            }
 
             // Horizontal flip - read bits from other direction
             int tileBit = (spr.attr&OAM_X_FLIP) ? (tileWidth-1) - k : k;
@@ -343,135 +400,64 @@ void DisplayComponent::DrawSpritesRow(byte y)
             cIdx = tileRow & (0x100<<tileBit) ? 2 : 0;
             cIdx += tileRow & (0x1<<tileBit) ? 1 : 0;
 
+            // Transparent pixel
+            if (cIdx == 0) {
+                continue;
+            }
+
             if (cgbProfile) {
+                // Priority check
+                if ( (sprBuffer[rx].priority <= i ) ) {
+                    continue;
+                }
+
                 palIndex = (spr.attr & 0x7) << 3;
                 palData = cgbOAMPal[palIndex + (cIdx<<1) + 1] << 8;
                 palData += cgbOAMPal[palIndex + (cIdx<<1)];
 
-                px.r = (palData & 0x1F) << 3;
-                px.g = ((palData>>5) & 0x1F) << 3;
-                px.b = ((palData>>10) & 0x1F) << 3;
+                sprBuffer[rx].cIdx = cIdx;
+                sprBuffer[rx].rgb.r = (palData & 0x1F) << 3;
+                sprBuffer[rx].rgb.g = ((palData>>5) & 0x1F) << 3;
+                sprBuffer[rx].rgb.b = ((palData>>10) & 0x1F) << 3;
+                sprBuffer[rx].priority = i;
+                sprBuffer[rx].BGWinOverOAM = spr.attr&OAM_BG_WINDOW_OVER_OBJ;
+
             } else {
+                // Priority check
+                if ( (sprBuffer[rx].priority <= spr.xPos ) ) {
+                    continue;
+                }
+
+                sprBuffer[rx].cIdx = cIdx;
                 cIdx<<=1;
-                px = dmgPal[(((spr.attr&OAM_PALETTE) ? lcdRegs.OBP1 : lcdRegs.OBP0 ) >>cIdx & 0x3)];
-            }
-            color = GetColorFromPalette(px);
-
-            // Sprite is hidden behind background
-            if (spr.attr&OAM_BG_WINDOW_OVER_OBJ && bgWinBuffer[rx]) {
-                color = 0xE;
+                sprBuffer[rx].rgb = dmgPal[(((spr.attr&OAM_PALETTE) ? lcdRegs.OBP1 : lcdRegs.OBP0 ) >>cIdx & 0x3)];
+                sprBuffer[rx].priority = spr.xPos;
+                sprBuffer[rx].BGWinOverOAM = spr.attr&OAM_BG_WINDOW_OVER_OBJ;
             }
 
-            // Check if the sprite has priority for this pixel position
-            // The leftmost sprite has priority over others
-            // If two sprites share the same position, the first one in OAM memory has priority
-            if (sprBuffer[rx] == 0xF || hasPriority) {
-                hasPriority = true;
-                if (cIdx != 0) sprBuffer[rx] = color;
-            }
-
-            rx ++;
         }        
     }
-
-    for (int i = 0; i < 256; i++) {
-        if (sprBuffer[i] != 0xE && sprBuffer[i] != 0xF) gwindow.DrawPixel(i, y, sprBuffer[i]);
-    }
 }
 
-void DisplayComponent::DrawBackgroundRow(byte y)
+void DisplayComponent::RenderFrame(byte y)
 {
-    byte tIdx;
-    byte sx = 0;
-    byte sy = 0;
-    int x = 0;
-    //int y = 0;
-    bool addressMode = false;
-    bool cgbProfile = (profile == CGB);
+    int color;
 
-    // Exit if window/background not enabled
-    if (! lcdRegs.LCDC & LCDC_BG_WINDOW_ENABLE_MASK) return;
+    // Merge the BG/Sprite pixels together
+    for (int i = 0; i < 160; i++) {
 
-    // Init background row buffer
-    for (int i = 0; i < 256; i++) {
-        bgWinBuffer[i] = 0x0;
-    }
+        Pixel bgPixel = bgWinBuffer[i];
+        Pixel oamPixel = sprBuffer[i];
 
-    // Get tile data addressing mode
-    addressMode =  lcdRegs.LCDC & LCDC_BG_WINDOW_TILE_DATA_MASK;
+        //Resolve sprite vs background pixel priority
+        if ( oamPixel.cIdx != 0 && ( bgPixel.cIdx == 0 || ( !bgPixel.BGWinOverOAM && !oamPixel.BGWinOverOAM ) ) ) {
+            color = GetColorFromPalette(oamPixel.rgb);
+        } else {
+            color = GetColorFromPalette(bgPixel.rgb);
+        }
 
-    // Get tile map memory location
-    word tileMapBase = (lcdRegs.LCDC & LCDC_BG_TILE_MAP_MASK) ? 0x9C00 : 0x9800;
-
-    // Starting pixel for first tile - offset from current X scroll register value
-    word startingXPixel = lcdRegs.SCX % 8;
-
-    // Draw a single horizontal (x) row across the screen
-    word tilesRow = (((byte)(lcdRegs.SCY + y) / tileHeight) * 32);
-
-    byte scrollOffset = lcdRegs.SCX / 8;
-
-    for (int i = 0; i < 32; i++) {
-        // Set to bank 0 for tile offset
-        mmu.PokeByte(0xFF4F, 0x0);
-
-        sbyte tIdx = mmu.PeekByte(tileMapBase + tilesRow + (i + scrollOffset) % 32);
-        byte tAttr = 0;
-
-        // Get CGB attributes
-        // Requires a bank switch
-        mmu.PokeByte(0xFF4F, 0x1);
-        tAttr = mmu.PeekByte(tileMapBase + tilesRow + (i + scrollOffset) % 32);
-
-        // Calculate tile Y offset, taking into account vertical flip bit (CGB only)
-        byte tileYoffset = (((lcdRegs.SCY%8) + y ) % tileWidth);
-        if ((tAttr & BG_Y_FLIP) && cgbProfile ) tileYoffset = ((tileHeight-1) - tileYoffset);
-        tileYoffset <<= 1; // Multiply offset as tiles are 2 bytes long
-
-        // Draw the tiles
-        DrawTileRow(addressMode ? (byte)tIdx : tIdx+0x80, x, y, tileYoffset, i == 0 ? startingXPixel : 0, addressMode ? 0x0 : 0x800, tAttr);
-        x += (tileWidth - (i == 0 ? startingXPixel : 0));
-    }      
-}
-
-void DisplayComponent::DrawWindowRow(byte y)
-{
-    byte tIdx;
-    byte sx = 0;
-    byte sy = 0;
-    int x = 0;
-    bool addressMode = false;
-
-    // Exit if window/background not enabled
-    if (!(lcdRegs.LCDC & LCDC_BG_WINDOW_ENABLE_MASK) ||  !(lcdRegs.LCDC & LCDC_WINDOW_ENABLE_MASK)) return;
-
-    // Exit if the scanline is not within the window
-    if (y < lcdRegs.WY) return;
-
-    // Get tile data addressing mode
-    addressMode =  lcdRegs.LCDC & LCDC_BG_WINDOW_TILE_DATA_MASK;
-
-    // Get tile map memory location
-    word tileMapBase = (lcdRegs.LCDC & LCDC_WINDOW_TILE_MAP_MASK) ? 0x9C00 : 0x9800;
-
-    // Draw a single horizontal (x) row across the screen
-    word tilesRow = (((y-lcdRegs.WY) / tileHeight) * 32);
-
-    for (int i = 0; i < 32; i++) {
-        // Set to bank 0 for tile offset
-        mmu.PokeByte(0xFF4F, 0x0);
-
-        sbyte tIdx = mmu.PeekByte(tileMapBase + tilesRow + (i) % 32);
-
-        // Get CGB attributes
-        // Requires a bank switch
-        mmu.PokeByte(0xFF4F, 0x1);
-        byte tAttr = mmu.PeekByte(tileMapBase + tilesRow + (i) % 32);
-
-        // Draw the tiles
-        DrawTileRow(addressMode ? (byte)tIdx : tIdx+0x80, x + (lcdRegs.WX-0x7), y, ((y-lcdRegs.WY) % tileWidth) * 2, 0, addressMode ? 0x0 : 0x800, tAttr);
-        x += tileWidth;
-    }
+        gwindow.DrawPixel(i, y, color);
+    }    
 }
 
 void DisplayComponent::PerformVDMA()
@@ -613,8 +599,8 @@ void DisplayComponent::Cycle()
                     byte tmp_vram_bnk = mmu.PeekByte(0xFF4F);
 
                     DrawBackgroundRow(lcdRegs.LY);
-                    DrawWindowRow(lcdRegs.LY);
                     DrawSpritesRow(lcdRegs.LY);
+                    RenderFrame(lcdRegs.LY);
                     displayCycles -= modeCycles;
                     lcdRegs.STAT &= ~(MODE3_DRAW);
 
