@@ -355,6 +355,7 @@ void DisplayComponent::DrawSpritesRow(byte y)
     byte palIndex;
     word palData;
     byte tileSize = (lcdRegs.LCDC&LCDC_SPRITE_SIZE_MASK) ? 15 : 7;
+    byte tIdxMask = (lcdRegs.LCDC&LCDC_SPRITE_SIZE_MASK) ? 0xFE : 0xFF; // LSB of tile index is ignored in 8x16 mode, alway start on multiple of 2
     bool cgbProfile = (profile == CGB);
 
     // Init sprite pixel buffer
@@ -383,7 +384,7 @@ void DisplayComponent::DrawSpritesRow(byte y)
         byte sprBnk = (cgbProfile && (spr.attr & 0x8)) ? 1 : 0; 
         mmu.PokeByte(0xFF4F, sprBnk);
 
-        tileRow = mmu.PeekWord(bp + tileYOffset + (spr.tIdx*tileIndex));
+        tileRow = mmu.PeekWord(bp + tileYOffset + ( (spr.tIdx & tIdxMask) * tileIndex));
         rx = xPos-1;
         for (int k = 7; k >= 0; k--) {
 
