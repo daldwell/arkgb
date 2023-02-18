@@ -230,6 +230,12 @@ void DisplayComponent::PokeByte(word addr, byte value)
         return;
     }
 
+    // LCD status (bits 0-2 are read only)
+    if (addr == 0xFF41) {
+        lcdRegs.STAT = (value&0xF8) + (lcdRegs.STAT&0x07);
+        return;
+    }
+
     // Clear screen if ppu is disabled
     if (addr == 0xFF40 && !(value&LCDC_PPU_ENABLE_MASK)) {
         gwindow.ClearSurface();
