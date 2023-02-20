@@ -82,6 +82,7 @@ class DisplayComponent : public GComponent
         void DrawBackgroundRow(byte);
         void RenderFrame(byte);
         void PerformVDMA();
+        inline bool WindowTile(int, int);
         LcdRegister lcdRegs;
         VdmaRegister vdmaRegs;
         Sprite oamTable[40];

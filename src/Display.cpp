@@ -256,6 +256,11 @@ int DisplayComponent::GetColorFromPalette(RGB rgb)
     return gwindow.GetRGB(rgb.r, rgb.g, rgb.b);
 }
 
+inline bool DisplayComponent::WindowTile(int x, int y)
+{
+    return (lcdRegs.LCDC & LCDC_WINDOW_ENABLE_MASK) && (x >= (lcdRegs.WX-0x7) && y >= lcdRegs.WY);
+}
+
 void DisplayComponent::DrawBackgroundRow(byte y)
 {
     int tileX; // X coordinate of tile, between 0-31
@@ -286,10 +291,10 @@ void DisplayComponent::DrawBackgroundRow(byte y)
     while (x < 160) {
 
         // Are we drawing the window?
-        bool windowTile = (lcdRegs.LCDC & LCDC_WINDOW_ENABLE_MASK) && (x >= (lcdRegs.WX-0x7) && y >= lcdRegs.WY);
+        bool windowTileRow = WindowTile(x, y);
 
         // Configure bg/window values
-        if (windowTile) {
+        if (windowTileRow) {
             tileX = ( (x-(lcdRegs.WX-0x7))/8 ) & 0x1F;
             tileY = (y-lcdRegs.WY) & 0xFF;
             tileMapAddr = (lcdRegs.LCDC & LCDC_WINDOW_TILE_MAP_MASK) ? 0x9C00 : 0x9800;
@@ -350,6 +355,10 @@ void DisplayComponent::DrawBackgroundRow(byte y)
                 bgWinBuffer[x].BGWinOverOAM = false;  // flag does not exist for DMG
             }
             x++;
+
+            // Exit if drawing background and we have reached the window X coordinate
+            if (!windowTileRow && WindowTile(x, y) )
+                break;
         }
     }
 }
