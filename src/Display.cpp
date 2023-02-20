@@ -238,6 +238,12 @@ void DisplayComponent::PokeByte(word addr, byte value)
 
     // Clear screen if ppu is disabled
     if (addr == 0xFF40 && !(value&LCDC_PPU_ENABLE_MASK)) {
+
+        // Clear LCD status registers
+        lcdRegs.LCDC = 0x00; 
+        lcdRegs.STAT &= 0xFC;
+        lcdRegs.LY = 0x00;
+
         gwindow.ClearSurface();
         gwindow.RefreshWindow();
     }
