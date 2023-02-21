@@ -148,7 +148,6 @@ void RomComponent::Load(const char * rmt)
 
     // Read bank 0 and 1 - all carts have these banks
     fileRead(&rom[0][0], sizeof(byte), 0x4000, romFile);
-    fileRead(&rom[1][0], sizeof(byte), 0x4000, romFile);
 
     // Set up rom header
     romHeader = (RomHeader*)(&rom[0][0]+0x104);
@@ -162,14 +161,15 @@ void RomComponent::Load(const char * rmt)
             mbc = new Mbc0;
             break;
         case 0x01:     // Handle MBC 1
+        case 0x03:
             mbc = new Mbc1;
             break;
-        case 0x03:
         case 0x10:     // Handle MBC 3
+        case 0x13:
             mbc = new Mbc3;
             break;
-        case 0x13:
         case 0x1b:     // Handle MBC 5
+        case 0x1e:     // Handle MBC 5
             mbc = new Mbc5;
             break;
         default:
@@ -179,10 +179,10 @@ void RomComponent::Load(const char * rmt)
     }
 
     // Read all ROM banks
-    if (romHeader->cartType != 0) {
-        for (int i = 2; i < (0x2 << romHeader->romSize); i++) {
-            fileRead(&rom[i][0], sizeof(byte), 0x4000, romFile);
-        }
+    int bankSize = (0x2 << romHeader->romSize)-1;
+    printf("BANK SIZE  %x %x\n", romHeader->romSize, bankSize);
+    for (int i = 1; i < (0x2 << romHeader->romSize); i++) {
+        fileRead(&rom[i][0], sizeof(byte), 0x4000, romFile);
     }
  
     // Load ram
@@ -193,6 +193,7 @@ void RomComponent::Load(const char * rmt)
         case 0x10:     // Handle MBC 3
         case 0x13:
         case 0x1b:     // Handle MBC 5
+        case 0x1e:     // Handle MBC 5
             // Read battery backed RAM
             strcpy(ramName, romName);
             changeExtension(ramName, "sav");

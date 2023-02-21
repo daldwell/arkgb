@@ -34,8 +34,8 @@ class RtcClock
 byte * memoryMap(word addr);
 extern byte unmapped;
 
-extern byte vram[1][0x2000]; 
+extern byte vram[2][0x2000]; 
 extern byte vram_bnk_no;
-extern byte wram[0x7][0x1000]; 
+extern byte wram[8][0x1000]; 
 extern byte wram_bnk_no;
 extern byte hram[0x100]; 
