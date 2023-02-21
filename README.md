@@ -20,19 +20,19 @@ Key Mappings: <kbd>&uarr;</kbd>, <kbd>&darr;</kbd>, <kbd>&larr;</kbd>, <kbd>&rar
     * Complete instruction set (base and extended)
     * Passes blaarg CPU tests
     * Full support for CPU interrupts
+* Gameboy color support:
+    * VRAM DMA
+    * Double-speed mode
+    * CBG sprite/background priority
 * GPU
 * Audio
 * Timer + DIV counter
 * Joypad
 * Battery-backed game saves
-* Gameboy color support (Work in progress)
 
 
 ## Future Goals
 
-* Gameboy color TODO:
-    * Implement CBG sprite/background priority selection
-    * Implement CBG HDMA support
 * Cross-platform support
     * Developed and tested on Windows using the GCC compiler
     * In theory, should be portable to other OS's that support GCC and the SDL libary, but haven't tried yet
@@ -45,9 +45,7 @@ Key Mappings: <kbd>&uarr;</kbd>, <kbd>&darr;</kbd>, <kbd>&larr;</kbd>, <kbd>&rar
 * Memory snapshots
 * Bootstrap ROM support
 * Complete support for all MBC types
-    * MBC 0 and 1 supported
-    * MBC 3 partially supported (RTC clock needs to be implemented)
-    * MBC 5 is a WIP (not fully working for all tested games)
+    * MBC 3 partially supported (day counter for RTC clock needs to be implemented)
 * Pass ALL blaarg emulator tests (currently failing some audio tests)
 
 ## Tests
@@ -59,6 +57,7 @@ Currently passing all blaarg CPU tests:
 ## GBC Screenshots
 Menu | Gameplay
 :-------------------------:|:-------------------------:
+<img src="images/smb_mnu.PNG"> | <img src="images/smb_gme.PNG">
 <img src="images/wario2_mnu.PNG"> | <img src="images/wario2_gme.PNG">
 <img src="images/pkmg_mnu.PNG"> | <img src="images/pkmg_gme.PNG">
 
