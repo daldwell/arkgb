@@ -7,8 +7,9 @@
 #include "Audio.h"
 #include "Timer.h"
 #include "GUnit.h"
+#include "Window.h"
 
-int audioCycles;
+double audioCycles;
 struct AudioRegisters audioRegs;
 SDL_AudioDeviceID audio_device_id;
 
@@ -674,7 +675,7 @@ void AudioComponent::Cycle()
         }
     }
 
-    if (audioCycles >= 87) {
+    if (audioCycles >= audioStepSize) {
         // Fill audio buffer every 1/48000 of a second
 
         // Left Channel
@@ -699,14 +700,14 @@ void AudioComponent::Cycle()
 
         bufferCursor++;
 
-        audioCycles -= 87;
+        audioCycles -= audioStepSize;
 
         // Playback audio when buffer is full
         if (bufferCursor >= 1024) {
             bufferCursor = 0;
            
             SDL_QueueAudio(audio_device_id, &mixData, 8192);
-            while (SDL_GetQueuedAudioSize(audio_device_id) >= 8192);
+            //while (SDL_GetQueuedAudioSize(audio_device_id) >= 8192);
         }
     }
 }
@@ -735,10 +736,10 @@ void AudioComponent::Reset()
     // Original comment: fix timing issues throughout ArkGB - sample rate should be 48000 but this is too fast for SML and tetris in ArkGB's current state. 
     // A timer is running too fast, or a cycle count is not right somewhere
     // NOTE- currently SML sounds perfect at 46000hz, tetris sounds perfect at 44100hz. 
-    audio_spec_want.freq     = 48000;
+    audio_spec_want.freq     = 48218;           // Slightly above 48000 because we are compensating for the 60hz vsync playback rate
     audio_spec_want.format   = AUDIO_F32;
     audio_spec_want.channels = 2;
-    audio_spec_want.samples  = 1024;
+    audio_spec_want.samples  = 512;
     audio_spec_want.userdata = (void*)&samples_played;
 
     audio_device_id = SDL_OpenAudioDevice(

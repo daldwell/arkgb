@@ -2,8 +2,7 @@
 
 #pragma once
 
-extern int audioCycles;
-extern int speedFactor;
+extern SDL_AudioDeviceID audio_device_id;
 
 // Channel variables
 struct AudioRegisters

@@ -27,3 +27,4 @@ class Window
 };
 
 extern Window gwindow;
+extern double audioStepSize;
