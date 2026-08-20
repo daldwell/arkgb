@@ -9,14 +9,14 @@
 // Global window object
 Window gwindow;
 
+// Audio step size
+double audioStepSize = 87;
+
 //Screen dimension constants
 const int SCREEN_WIDTH = 320;
 const int SCREEN_HEIGHT = 288;
 const int SCREEN_FPS = 60;
 const int SCREEN_TICKS_PER_FRAME = 1000 / SCREEN_FPS;
-
-// Frame counter
-int startFrameTime = 0;
 
 // The gameboy tile map is 256x256 pixels, but this is truncated into the gameboy's display size of 160x144.
 // A generously sized canvas buffer is used to render the full 256x256 frame which is clipped for the smaller 160x144 display.
@@ -50,7 +50,7 @@ Window::Window()
     //Create canvas surface
     surface = SDL_CreateRGBSurface(0, CANVAS_WIDTH, CANVAS_HEIGHT, 32, 0, 0, 0, 0);
 
-    accelerated_renderer=SDL_CreateRenderer(window,-1,SDL_RENDERER_ACCELERATED);
+    accelerated_renderer=SDL_CreateRenderer(window,-1,SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 
     running = true;
 }
@@ -124,7 +124,7 @@ void Window::RefreshWindow()
 	destRect.h = SCREEN_HEIGHT;
 	
 	SDL_Surface* drawSurface = SDL_ConvertSurface( surface, screen->format, 0 );
-	// SDL_BlitScaled(drawSurface, &srcRect, screen, &destRect );
+	// SDL_BlitScaled(surface, &srcRect, screen, &destRect );
 	// SDL_UpdateWindowSurface(window);
 
     texture = SDL_CreateTextureFromSurface(accelerated_renderer, drawSurface);
@@ -133,17 +133,28 @@ void Window::RefreshWindow()
     SDL_DestroyTexture(texture);
     SDL_FreeSurface(drawSurface);
 
-    // TODO: (UPDATE Vsync disabled) screen refresh is vsynced, this works perfectly for a 60hz refresh but will run too fast on a higher rate
-    // Need to come up with a good standardised timing mechanisim to cap at 60fps - I have tried counting SDL ticks in a hard loop, but this produces a small but noticible stutter while scrolling
-    // (should not do this anyway as it wastes cpu cycles)
-    // The other option I tried is timing with SDL delay - this produces an even more inconsistent frame rate 
-    // Perhaps SDL isn't up to the task for time keeping?
-    // int frameTicks = SDL_GetTicks() - startFrameTime;
-    // while( frameTicks < SCREEN_TICKS_PER_FRAME )
-    // {
-    //     frameTicks = SDL_GetTicks() - startFrameTime;
-    // }
+    // Dynamically resample the audio to track the vsync framerate
+    // Without this the video drifts ahead of the audio as the 60hz refresh video rate is slighty faster than the gameboy audio 59.7275 rate
+    int queueSize = SDL_GetQueuedAudioSize(audio_device_id);
+    // Handle large deviations
+    if (queueSize > 8192 + 2048) {
+        audioStepSize = 87.85;
+    } else if (queueSize < 8192 - 2048) {
+        audioStepSize = 87.15;
+    } else {
+        // Handle smaller deviations
+        if (queueSize > 8192) {
+            audioStepSize = 87.45;
+        } else {
+            audioStepSize = 87.31;
+        }
+    }
 
-    startFrameTime = SDL_GetTicks();
     EventDispatch();
 }
+
+// FPS counter
+// 1. Track time per frame. Milliseconds per frame.
+// 2. Build up a buffer of these. Maybe 10 frame timings.
+// 3. Get the average time from this in millis
+// 4. 1000 / Average time = FPS

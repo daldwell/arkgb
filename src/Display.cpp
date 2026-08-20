@@ -289,7 +289,6 @@ void DisplayComponent::DrawBackgroundRow(byte y)
 
     int x = 0;
     while (x < 160) {
-
         // Are we drawing the window?
         bool windowTileRow = WindowTile(x, y);
 
@@ -331,7 +330,7 @@ void DisplayComponent::DrawBackgroundRow(byte y)
         // Get the tile pixel data
         tileData = mmu.PeekWord(tileDataAddr + (tIdx << 4) + tileRow);
 
-        for (int k = 7-startingXPixel; k >= 0; k--) {
+        for (int k = 7-startingXPixel; k >= 0 && x < 160; k--) {
             // Horizontal flip - read bits from other direction (CGB only)
             int tileBit = ((tAttr&BG_X_FLIP) && cgbProfile) ? (tileWidth-1) - k : k;
             
@@ -378,6 +377,7 @@ void DisplayComponent::DrawSpritesRow(byte y)
     byte tileSize = (lcdRegs.LCDC&LCDC_SPRITE_SIZE_MASK) ? 15 : 7;
     byte tIdxMask = (lcdRegs.LCDC&LCDC_SPRITE_SIZE_MASK) ? 0xFE : 0xFF; // LSB of tile index is ignored in 8x16 mode, alway start on multiple of 2
     bool cgbProfile = (profile == CGB);
+    int spriteLineCount = 0; // Track how many sprites rendered on this line, can have 10 max
 
     // Init sprite pixel buffer
     for (int i = 0; i < 160; i++) {
@@ -387,7 +387,9 @@ void DisplayComponent::DrawSpritesRow(byte y)
         sprBuffer[i].BGWinOverOAM = false;
     }
 
-    for (int i = 0; i < 40; i++) {
+    // Scan the OAM table for sprites on this scanline
+    // This roughly emulates the hardware OAM scan method and the OAM FIFO queue pushing
+    for (int i = 0; i < 40 && spriteLineCount < 10; i++) {
         spr = oamTable[i];
         hasPriority = false;
         int xPos = spr.xPos - spriteXOffset;
@@ -398,6 +400,9 @@ void DisplayComponent::DrawSpritesRow(byte y)
 
         // Skip sprite if it falls outside the current scan line
         if (y < yPos || y > yPos+tileSize) continue;
+
+        // From this point on, we will render this sprite on the scanline so increment the count now
+        spriteLineCount++;
 
         tileYOffset = (spr.attr&OAM_Y_FLIP ? ( tileSize - (y - yPos) ) : (y - yPos)) * 2;
 
@@ -461,7 +466,7 @@ void DisplayComponent::DrawSpritesRow(byte y)
     }
 }
 
-void DisplayComponent::RenderFrame(byte y)
+void DisplayComponent::RenderScanLine(byte y)
 {
     int color;
 
@@ -620,9 +625,19 @@ void DisplayComponent::Cycle()
                     // Vram bank is trashed during screen refresh
                     byte tmp_vram_bnk = mmu.PeekByte(0xFF4F);
 
+                    // To render a scanline:
+                    // 1. Build a pixel buffer for the background/window
+                    // 2. Build a pixel buffer for the sprites on the scanline
+                    // 3. Per X coordinate, take a pixel from both buffers, resolve priority, and push the pixel to the screen.
+                    // NOTE - this method of rendering is somewhat similar, but not the same as the actual hardware method of pixel FIFO
+                    // The real hardware uses a rather sophisticated system that pushes bg/sprite pixels onto FIFO seperate queues (up to 16 pixels)
+                    // This is interleaved with another process that pops pixels from both FIFO queues for rendering when certain conditions are met, ensuring that the FIFO queues are kept in sync and do not overflow
+                    // ArkGB builds the background and sprite FIFO queues separately for the entire scanline, and "pops" them together in one hit with the same pixel priority rules as the hardware. So essentially a scanline sized FIFO queue.
+                    // As the real timing of the FIFO queue is not emulated, some of the more nuanced aspects of the display aren't emulated here i.e. sprite fetch cancellation occuring mid scan line when a game switches off the sprite flag
                     DrawBackgroundRow(lcdRegs.LY);
                     DrawSpritesRow(lcdRegs.LY);
-                    RenderFrame(lcdRegs.LY);
+                    RenderScanLine(lcdRegs.LY);
+
                     displayCycles -= modeCycles;
                     lcdRegs.STAT &= ~(MODE3_DRAW);
 

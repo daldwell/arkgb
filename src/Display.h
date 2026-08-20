@@ -80,7 +80,7 @@ class DisplayComponent : public GComponent
         void DrawTileRow(byte, int, int, byte, byte, word, byte);
         void DrawSpritesRow(byte);
         void DrawBackgroundRow(byte);
-        void RenderFrame(byte);
+        void RenderScanLine(byte);
         void PerformVDMA();
         inline bool WindowTile(int, int);
         LcdRegister lcdRegs;
