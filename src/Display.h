@@ -73,6 +73,7 @@ class DisplayComponent : public GComponent
         void Cycle() override;
         void Reset() override;
         VdmaStatus GetVdmaStatus();
+        int frameReady = 0;
     protected:
         bool MemoryMapped(word);
         int GetColorFromPalette(RGB);

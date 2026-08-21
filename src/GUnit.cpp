@@ -31,8 +31,17 @@ void GUCycle()
     interrupt.Cycle();
     cpu.Cycle();
     timer.Cycle();
-    display.Cycle();
     audio.Cycle();
+    display.Cycle();
+
+    if (display.frameReady >= speedFactor) {
+        gwindow.RefreshWindow();
+        gwindow.ClearSurface();
+        display.frameReady = 0;
+    
+        // RESET FOR NEXT FRAME
+        samplesWrittenThisFrame = 0;
+    }
 }
 
 void GUReset()

@@ -20,6 +20,7 @@ int main(int argv, char** args)
     GUReset();
     initDebugger();
     cpuRunning = true;
+    SDL_PauseAudioDevice(audio_device_id, 0);
     while (gwindow.running) {
         if (cpuRunning) {
             GUCycle();

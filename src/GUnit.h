@@ -6,6 +6,7 @@
 #include "Cpu.h"
 #include "Control.h"
 #include "Rom.h"
+#include "Window.h"
 
 #pragma once
 

@@ -1,6 +1,7 @@
 #include <SDL.h>
 #include <cstdio>
 #include <assert.h>
+#include <atomic>
 #include "Mmu.h"
 #include "Cpu.h"
 #include "Typedefs.h"
@@ -12,11 +13,14 @@
 double audioCycles;
 struct AudioRegisters audioRegs;
 SDL_AudioDeviceID audio_device_id;
+int samplesWrittenThisFrame = 0;
 
 // Audio buffer data
-float mixData[2048];
-int bufferCursor;
-int speedFactor;
+#define RING_BUF_SIZE 16384
+float mixData[RING_BUF_SIZE];
+std::atomic<int> bufferReadCursor{0};
+std::atomic<int> bufferWriteCursor{0};
+int speedFactor = 1;
 
 byte dutyWaveTable[4]
 {
@@ -48,10 +52,10 @@ void AudioComponent::EventHandler(SDL_Event * e)
         switch (e->key.keysym.sym)
         {
             case SDLK_KP_PLUS:
-                speedFactor = 4;
+                speedFactor += 4;
                 break;
             case SDLK_KP_MINUS:
-                speedFactor = 0;
+                speedFactor = 1;
                 break;
             default:
                 break;
@@ -627,7 +631,7 @@ void AudioComponent::Cycle()
 
         for (int i = 0; i < (cpuCycles/cycleFactor); i++) {
                 
-            audioCycles += (cycleFactor >> doubleSpeed) >> speedFactor;
+            audioCycles += (cycleFactor >> doubleSpeed);
             timeRegs.DIV += cycleFactor;
 
             out = (timeRegs.DIV & (0x1000 << doubleSpeed));
@@ -675,42 +679,76 @@ void AudioComponent::Cycle()
         }
     }
 
-    if (audioCycles >= audioStepSize) {
-        // Fill audio buffer every 1/48000 of a second
+    // CHANGED: Use a while loop to drain all accumulated samples!
+    // This allows your engine to push 2 or more samples if a large cycle block occurred.
+    while (audioCycles >= audioStepSize) {
+        for (int ig = 0; ig < 1; ig++) {
+        int currentWrite = bufferWriteCursor.load(std::memory_order_relaxed);
+        int currentRead = bufferReadCursor.load(std::memory_order_relaxed);
 
-        // Left Channel
-        // Add and average channel amplitudes, taking into account panning registers and DAC 
-        mixData[2*bufferCursor+0] += (audioRegs.ctrl.lrEnable&0x10) ? pulseChannel1.channelData : 0;
-        mixData[2*bufferCursor+0] += (audioRegs.ctrl.lrEnable&0x20) ? pulseChannel2.channelData : 0;
-        mixData[2*bufferCursor+0] += (audioRegs.ctrl.lrEnable&0x40) ? waveChannel.channelData : 0;
-        mixData[2*bufferCursor+0] += (audioRegs.ctrl.lrEnable&0x80) ? noiseChannel.channelData : 0;
-        mixData[2*bufferCursor+0] /= 4;
-        mixData[2*bufferCursor+0] = (mixData[2*bufferCursor+0] / 7.5);
-        mixData[2*bufferCursor+0] *= (audioRegs.ctrl.vinVol&0x70>>4);
+        int nextWrite = (currentWrite + 1) % RING_BUF_SIZE;
+        int nextWrite2 = (nextWrite + 1) % RING_BUF_SIZE; 
 
-        // Right Channel
-        // Add and average channel amplitudes, taking into account panning registers
-        mixData[2*bufferCursor+1] += (audioRegs.ctrl.lrEnable&0x01) ? pulseChannel1.channelData : 0;
-        mixData[2*bufferCursor+1] += (audioRegs.ctrl.lrEnable&0x02) ? pulseChannel2.channelData : 0;
-        mixData[2*bufferCursor+1] += (audioRegs.ctrl.lrEnable&0x04) ? waveChannel.channelData : 0;
-        mixData[2*bufferCursor+1] += (audioRegs.ctrl.lrEnable&0x08) ? noiseChannel.channelData : 0;
-        mixData[2*bufferCursor+1] /= 4;
-        mixData[2*bufferCursor+1] = (mixData[2*bufferCursor+1] / 7.5);
-        mixData[2*bufferCursor+1] *= (audioRegs.ctrl.vinVol&0x7);
+        if (currentRead != nextWrite2) {
+            float leftVolume = (float)((audioRegs.ctrl.vinVol >> 4) & 0x07);
+            float rightVolume = (float)(audioRegs.ctrl.vinVol & 0x07);
 
-        bufferCursor++;
+            float leftAccum = 0.0f;
+            leftAccum += (audioRegs.ctrl.lrEnable & 0x10) ? pulseChannel1.channelData : 0.0f;
+            leftAccum += (audioRegs.ctrl.lrEnable & 0x20) ? pulseChannel2.channelData : 0.0f;
+            leftAccum += (audioRegs.ctrl.lrEnable & 0x40) ? waveChannel.channelData : 0.0f;
+            leftAccum += (audioRegs.ctrl.lrEnable & 0x80) ? noiseChannel.channelData : 0.0f;
+            
+            leftAccum /= 4.0f;
+            leftAccum = (leftAccum / 7.5f) * leftVolume;
 
-        audioCycles -= audioStepSize;
+            float rightAccum = 0.0f;
+            rightAccum += (audioRegs.ctrl.lrEnable & 0x01) ? pulseChannel1.channelData : 0.0f;
+            rightAccum += (audioRegs.ctrl.lrEnable & 0x02) ? pulseChannel2.channelData : 0.0f;
+            rightAccum += (audioRegs.ctrl.lrEnable & 0x04) ? waveChannel.channelData : 0.0f;
+            rightAccum += (audioRegs.ctrl.lrEnable & 0x08) ? noiseChannel.channelData : 0.0f;
+            
+            rightAccum /= 4.0f;
+            rightAccum = (rightAccum / 7.5f) * rightVolume;
 
-        // Playback audio when buffer is full
-        if (bufferCursor >= 1024) {
-            bufferCursor = 0;
-           
-            SDL_QueueAudio(audio_device_id, &mixData, 8192);
-            //while (SDL_GetQueuedAudioSize(audio_device_id) >= 8192);
+            mixData[currentWrite] = leftAccum;
+            mixData[nextWrite]    = rightAccum;
+
+            bufferWriteCursor.store(nextWrite2, std::memory_order_release);
+
+            samplesWrittenThisFrame++;
+        } else {
+            // Safe Overflow Catch
+            break; // If buffer is completely full, break to avoid infinite loop
+        }
+
+        }
+            audioCycles -= audioStepSize;
+    }
+}
+
+static void AudioCallback(void* userdata, Uint8* stream, int len) {
+    float* output = (float*)stream;
+    int samplesNeeded = len / sizeof(float); 
+
+    for (int i = 0; i < samplesNeeded; i++) {
+        int currentRead = bufferReadCursor.load(std::memory_order_relaxed);
+        int currentWrite = bufferWriteCursor.load(std::memory_order_acquire); // Safe lockstep link
+        // If the emulator thread has data waiting, stream it out sample-by-sample
+        if (currentRead != currentWrite) {
+            output[i] = mixData[currentRead];
+
+            int nextRead = (currentRead + 1) % RING_BUF_SIZE;
+            bufferReadCursor.store(nextRead, std::memory_order_relaxed);
+        } else {
+            // UNDERFLOW SAFETY: If the emulator briefly hitches, fill with dead silence.
+            // Because it drops sample-by-sample, it avoids the harsh digital "cracks".
+            //printf("AUDIO BUFFER UNDERFLOW\n");
+            output[i] = 0.0f; 
         }
     }
 }
+
 
 void AudioComponent::Reset() 
 {
@@ -719,8 +757,6 @@ void AudioComponent::Reset()
     pulseChannel2.Trigger();
     waveChannel.Trigger();
     noiseChannel.Trigger();
-
-    uint64_t samples_played = 0;
 
     if(SDL_Init(SDL_INIT_AUDIO) < 0)
     {
@@ -731,16 +767,12 @@ void AudioComponent::Reset()
 
     SDL_AudioSpec audio_spec_want, audio_spec;
     SDL_memset(&audio_spec_want, 0, sizeof(audio_spec_want));
-
-    // UPDATE 20/11/22 - changed 'audioCycles = 0' to 'audioCycles -= 87' - tetris and SML now sound perfect at 48000 and this also fixed some fuzzy tones at higher pitches
-    // Original comment: fix timing issues throughout ArkGB - sample rate should be 48000 but this is too fast for SML and tetris in ArkGB's current state. 
-    // A timer is running too fast, or a cycle count is not right somewhere
-    // NOTE- currently SML sounds perfect at 46000hz, tetris sounds perfect at 44100hz. 
-    audio_spec_want.freq     = 48218;           // Slightly above 48000 because we are compensating for the 60hz vsync playback rate
+    audio_spec_want.freq     = 48000;           // Slightly above 48000 because we are compensating for the 60hz vsync playback rate
     audio_spec_want.format   = AUDIO_F32;
     audio_spec_want.channels = 2;
-    audio_spec_want.samples  = 512;
-    audio_spec_want.userdata = (void*)&samples_played;
+    audio_spec_want.samples  = 1024;
+    audio_spec_want.callback = AudioCallback;
+    audio_spec_want.userdata = NULL;
 
     audio_device_id = SDL_OpenAudioDevice(
         NULL, 0,
@@ -754,6 +786,12 @@ void AudioComponent::Reset()
         SDL_Quit();
         exit(1);
     }
-     SDL_PauseAudioDevice(audio_device_id, 0);
+
+    for (int i = 0; i < 4096; i++) {
+        mixData[i] = 0.0f;
+    }
+
+    bufferReadCursor.store(0); 
+    bufferWriteCursor.store(4096); // Set the write marker ahead of the silent runway
 
 }
