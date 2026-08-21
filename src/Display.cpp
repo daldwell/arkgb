@@ -244,8 +244,8 @@ void DisplayComponent::PokeByte(word addr, byte value)
         lcdRegs.STAT &= 0xFC;
         lcdRegs.LY = 0x00;
 
-        gwindow.ClearSurface();
-        gwindow.RefreshWindow();
+        // Refresh screen
+        frameReady += 1;
     }
 
     *((byte*)&lcdRegs + (addr&0xF)) = value;
@@ -585,9 +585,8 @@ void DisplayComponent::Cycle()
 
                     if (lcdRegs.LY > 143) {
 
-                        // TODO: drawing routines
-                        gwindow.RefreshWindow();
-                        gwindow.ClearSurface();
+                        // Ready to draw a frame
+                        frameReady += 1;
 
                         // Turn on vblank mode and enable vblank interrupt
                         lcdRegs.STAT &= ~(MODE3_DRAW);

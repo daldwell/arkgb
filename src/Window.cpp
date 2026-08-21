@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <atomic>
 #include "Window.h"
 #include "Debugger.h"
 #include "GUnit.h"
@@ -49,9 +50,13 @@ Window::Window()
 
     //Create canvas surface
     surface = SDL_CreateRGBSurface(0, CANVAS_WIDTH, CANVAS_HEIGHT, 32, 0, 0, 0, 0);
-
     accelerated_renderer=SDL_CreateRenderer(window,-1,SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-
+    texture = SDL_CreateTexture(
+        accelerated_renderer, 
+        SDL_PIXELFORMAT_ARGB8888, // Use your surface's native format
+        SDL_TEXTUREACCESS_STREAMING, // Streaming mode is highly optimized for frame updates
+        160, 144 // The Game Boy's native resolution
+    );
     running = true;
 }
 
@@ -123,32 +128,40 @@ void Window::RefreshWindow()
 	destRect.w = SCREEN_WIDTH;
 	destRect.h = SCREEN_HEIGHT;
 	
-	SDL_Surface* drawSurface = SDL_ConvertSurface( surface, screen->format, 0 );
-	// SDL_BlitScaled(surface, &srcRect, screen, &destRect );
-	// SDL_UpdateWindowSurface(window);
+    // 1. Update the existing texture with your surface's fresh pixel data
+    // (Replace 'surface->pixels' and 'surface->pitch' with your source surface variables)
+    SDL_UpdateTexture(texture, NULL, surface->pixels, surface->pitch);
 
-    texture = SDL_CreateTextureFromSurface(accelerated_renderer, drawSurface);
-    SDL_RenderCopy(accelerated_renderer,texture,&srcRect, &destRect);
+    // 2. Clear the screen renderer
+    SDL_RenderClear(accelerated_renderer);
+
+    // 3. Copy the updated texture to the screen (handles scaling automatically if destRect is larger)
+    SDL_RenderCopy(accelerated_renderer, texture, &srcRect, &destRect);
+
+    // 4. Swap the buffers smoothly via VSync
     SDL_RenderPresent(accelerated_renderer);
-    SDL_DestroyTexture(texture);
-    SDL_FreeSurface(drawSurface);
 
-    // Dynamically resample the audio to track the vsync framerate
-    // Without this the video drifts ahead of the audio as the 60hz refresh video rate is slighty faster than the gameboy audio 59.7275 rate
-    int queueSize = SDL_GetQueuedAudioSize(audio_device_id);
-    // Handle large deviations
-    if (queueSize > 8192 + 2048) {
-        audioStepSize = 87.85;
-    } else if (queueSize < 8192 - 2048) {
-        audioStepSize = 87.15;
-    } else {
-        // Handle smaller deviations
-        if (queueSize > 8192) {
-            audioStepSize = 87.45;
-        } else {
-            audioStepSize = 87.31;
-        }
-    }
+    // Calculate the distance between the cursors
+    int itemsInBuffer = (bufferWriteCursor.load(std::memory_order_relaxed) - bufferReadCursor.load(std::memory_order_relaxed) + RING_BUF_SIZE) % RING_BUF_SIZE;
+
+    const float BASELINE_STEP = 87.381333f; // 4,194,304 Hz / 48,000 Hz
+    const int TARGET_CUSHION = 2048;        // 1024 stereo samples
+
+    // Calculate error (positive means too full, negative means starving)
+    int error = itemsInBuffer - TARGET_CUSHION;
+
+    // Proportional adjustment factor (Tweak this value to adjust sensitivity)
+    // A value of 0.0005f means if you are 500 items short, the step increases by ~0.25
+    const float Kp = 0.0005f; 
+
+    // Adjust the step size lineally: 
+    // If error is negative (starving), audioStepSize INCREASES.
+    // This reduces the number of samples produced per frame to perfectly match your monitor's VSync delay.
+    audioStepSize = BASELINE_STEP + (error * Kp);
+
+    // Clamp the step size so audio pitch doesn't warp noticeably
+    if (audioStepSize < 87.1f) audioStepSize = 87.1f;
+    if (audioStepSize > 87.8f) audioStepSize = 87.8f;
 
     EventDispatch();
 }
