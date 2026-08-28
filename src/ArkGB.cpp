@@ -9,23 +9,18 @@
 
 int main(int argv, char** args)
 {
-    if (argv != 2) {
-        Log("Usage: ArkGB.exe rom.gb(c) ", INFO);
-        return 0;
-    }
-
-    Log("Welcome to ArkGB!", INFO);
-
-    GUInit(args[1]);
-    GUReset();
-    initDebugger();
-    cpuRunning = true;
-    SDL_PauseAudioDevice(audio_device_id, 0);
-    while (gwindow.running) {
-        if (cpuRunning) {
-            GUCycle();
-        } 
-    }
     
+    Log("Welcome to ArkGB!", INFO);
+    Log("Usage: ArkGB.exe rom.gb(c) ", INFO);
+
+    initOpc();
+    Log("Opcodes initialised", INFO);
+    if (argv > 1) { GUInit(args[1]); } // If a ROM was supplied as argument
+    Log("Supplied rom loaded", INFO);
+    Log("Beginning main loop", INFO);
+    while (gwindow.running) {
+        GUCycle();
+    }
+    Log("Thank you and goodnight!", INFO);
     return 0;
 }

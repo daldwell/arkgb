@@ -24,6 +24,7 @@ class Window
         SDL_Renderer* accelerated_renderer = NULL;
         SDL_Texture* texture = NULL;
         void EventDispatch();
+        void BuildUI();
 };
 
 extern Window gwindow;

@@ -74,6 +74,10 @@ class DisplayComponent : public GComponent
         void Reset() override;
         VdmaStatus GetVdmaStatus();
         int frameReady = 0;
+        LcdRegister lcdRegs;
+        bool drawOam = true;
+        bool drawBg = true;
+        bool drawWin = true;
     protected:
         bool MemoryMapped(word);
         int GetColorFromPalette(RGB);
@@ -84,7 +88,6 @@ class DisplayComponent : public GComponent
         void RenderScanLine(byte);
         void PerformVDMA();
         inline bool WindowTile(int, int);
-        LcdRegister lcdRegs;
         VdmaRegister vdmaRegs;
         Sprite oamTable[40];
         int displayCycles;

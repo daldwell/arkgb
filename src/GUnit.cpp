@@ -19,28 +19,34 @@ RomComponent romComponent;
 
 void GUInit(char * romName)
 {
-    initOpc();
-    //executeTests();
-
+    romComponent.Close();
     romComponent.Load(romName);
+    GUReset();
+    cpuRunning = true;
 }
 
 void GUCycle()
 {
-    cpuCycles = 0;
-    interrupt.Cycle();
-    cpu.Cycle();
-    timer.Cycle();
-    audio.Cycle();
-    display.Cycle();
+    if (cpuRunning) {
+        cpuCycles = 0;
+        interrupt.Cycle();
+        cpu.Cycle();
+        timer.Cycle();
+        audio.Cycle();
+        display.Cycle();
 
-    if (display.frameReady >= speedFactor) {
+        if (display.frameReady >= speedFactor) {
+            gwindow.RefreshWindow();
+            gwindow.ClearSurface();
+            display.frameReady = 0;
+        
+            // RESET FOR NEXT FRAME
+            samplesWrittenThisFrame = 0;
+        }
+    } else {
+        // Just render the GUI
         gwindow.RefreshWindow();
-        gwindow.ClearSurface();
-        display.frameReady = 0;
-    
-        // RESET FOR NEXT FRAME
-        samplesWrittenThisFrame = 0;
+        gwindow.ClearSurface();    
     }
 }
 

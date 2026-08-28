@@ -53,6 +53,7 @@ class PulseChannel2 : AChannel
         ~PulseChannel2() {};
         void Trigger();
         void Cycle();
+        bool mute = false;
     protected:
         // Helpers
         byte dutyPos;
@@ -71,6 +72,7 @@ class PulseChannel1 : PulseChannel2
         ~PulseChannel1() {};
         void Trigger();
         void Cycle();
+        bool mute = false;
     protected:
         int CalculateFrequency();
         // Helpers
@@ -88,6 +90,7 @@ class WaveChannel : AChannel
         ~WaveChannel() {};
         void Trigger();
         void Cycle();
+        bool mute = false;
     protected:
         // Helpers
         byte wavSample;
@@ -105,6 +108,7 @@ class NoiseChannel : AChannel
         ~NoiseChannel() {};
         void Trigger();
         void Cycle();
+        bool mute = false;
     protected:
         // Helpers
         word LFSR;
@@ -125,11 +129,11 @@ class AudioComponent : public GComponent
         byte PeekByte(word) override;
         void Cycle() override;
         void Reset() override;
-    protected:
-        bool MemoryMapped(word);
         PulseChannel1 pulseChannel1;
         PulseChannel2 pulseChannel2;
         WaveChannel waveChannel;
         NoiseChannel noiseChannel;
+    protected:
+        bool MemoryMapped(word);
         friend class MmuComponent;
 };

@@ -52,7 +52,7 @@ void AudioComponent::EventHandler(SDL_Event * e)
         switch (e->key.keysym.sym)
         {
             case SDLK_KP_PLUS:
-                speedFactor += 4;
+                speedFactor += 2;
                 break;
             case SDLK_KP_MINUS:
                 speedFactor = 1;
@@ -60,6 +60,8 @@ void AudioComponent::EventHandler(SDL_Event * e)
             default:
                 break;
         }
+
+        
     }
 }
 
@@ -619,6 +621,8 @@ void NoiseChannel::Cycle()
 
 void AudioComponent::Cycle() 
 {
+    SDL_PauseAudioDevice(audio_device_id, 0);
+
     bool incFs = false;
     word out = 0;
     int cycleFactor = 4;
@@ -694,19 +698,19 @@ void AudioComponent::Cycle()
             float rightVolume = (float)(audioRegs.ctrl.vinVol & 0x07);
 
             float leftAccum = 0.0f;
-            leftAccum += (audioRegs.ctrl.lrEnable & 0x10) ? pulseChannel1.channelData : 0.0f;
-            leftAccum += (audioRegs.ctrl.lrEnable & 0x20) ? pulseChannel2.channelData : 0.0f;
-            leftAccum += (audioRegs.ctrl.lrEnable & 0x40) ? waveChannel.channelData : 0.0f;
-            leftAccum += (audioRegs.ctrl.lrEnable & 0x80) ? noiseChannel.channelData : 0.0f;
+            leftAccum += ((audioRegs.ctrl.lrEnable & 0x10) && !pulseChannel1.mute) ? pulseChannel1.channelData : 0.0f;
+            leftAccum += ((audioRegs.ctrl.lrEnable & 0x20) && !pulseChannel2.mute) ? pulseChannel2.channelData : 0.0f;
+            leftAccum += ((audioRegs.ctrl.lrEnable & 0x40) && !waveChannel.mute) ? waveChannel.channelData : 0.0f;
+            leftAccum += ((audioRegs.ctrl.lrEnable & 0x80) && !noiseChannel.mute) ? noiseChannel.channelData : 0.0f;
             
             leftAccum /= 4.0f;
             leftAccum = (leftAccum / 7.5f) * leftVolume;
 
             float rightAccum = 0.0f;
-            rightAccum += (audioRegs.ctrl.lrEnable & 0x01) ? pulseChannel1.channelData : 0.0f;
-            rightAccum += (audioRegs.ctrl.lrEnable & 0x02) ? pulseChannel2.channelData : 0.0f;
-            rightAccum += (audioRegs.ctrl.lrEnable & 0x04) ? waveChannel.channelData : 0.0f;
-            rightAccum += (audioRegs.ctrl.lrEnable & 0x08) ? noiseChannel.channelData : 0.0f;
+            rightAccum += ((audioRegs.ctrl.lrEnable & 0x01) && !pulseChannel1.mute) ? pulseChannel1.channelData : 0.0f;
+            rightAccum += ((audioRegs.ctrl.lrEnable & 0x02) && !pulseChannel2.mute) ? pulseChannel2.channelData : 0.0f;
+            rightAccum += ((audioRegs.ctrl.lrEnable & 0x04) && !waveChannel.mute) ? waveChannel.channelData : 0.0f;
+            rightAccum += ((audioRegs.ctrl.lrEnable & 0x08) && !noiseChannel.mute) ? noiseChannel.channelData : 0.0f;
             
             rightAccum /= 4.0f;
             rightAccum = (rightAccum / 7.5f) * rightVolume;
@@ -752,6 +756,8 @@ static void AudioCallback(void* userdata, Uint8* stream, int len) {
 
 void AudioComponent::Reset() 
 {
+    SDL_PauseAudioDevice(audio_device_id, 1);
+
     // Set frequency timers
     pulseChannel1.Trigger();
     pulseChannel2.Trigger();

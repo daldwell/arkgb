@@ -29,6 +29,8 @@ Key Mappings: <kbd>&uarr;</kbd>, <kbd>&darr;</kbd>, <kbd>&larr;</kbd>, <kbd>&rar
 * Timer + DIV counter
 * Joypad
 * Battery-backed game saves
+* Imgui-based user interface
+* Basic debugging UI widgets
 
 
 ## Future Goals
@@ -39,7 +41,6 @@ Key Mappings: <kbd>&uarr;</kbd>, <kbd>&darr;</kbd>, <kbd>&larr;</kbd>, <kbd>&rar
     * Support for CMAKE
 * Shift from C style coding (project originally started in C) to more modern C++ style/features
 * Automated testing for builds
-* Add debugging UI widgets (ROM disassembly, breakpoints etc)
 * Customizable key mappings
 * Serial cable support
 * Memory snapshots
@@ -76,3 +77,6 @@ Menu | Gameplay
 * [BGB emulator](http://bgb.bircd.org/) --- one of the "Gold Standard" emulators currently available, used to help with testing/debugging ArkGB
 * [Pandocs](https://gbdev.io/pandocs/)
 * [Javascript GB emulator](https://imrannazar.com/GameBoy-Emulation-in-JavaScript:-The-CPU) -- excellent series of articles describing the development of a GB emulator in javascript
+
+## Dependencies & Credits
+* [Dear ImGui](https://github.com) - Distributed under the MIT License. Copyright (c) 2014-2026 Omar Cornut.

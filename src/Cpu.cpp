@@ -8,7 +8,7 @@
 #include "GUnit.h"
 
 int cpuCycles;
-bool cpuRunning;
+bool cpuRunning = false;
 bool halt;
 bool doubleSpeed;
 
@@ -80,4 +80,9 @@ void CpuComponent::Reset()
     IFRegister = 0xE1;
     IERegister = 0x0;
 
+    // Double speed
+    doubleSpeed = false;
+
+    // Halt
+    halt = false;
 }

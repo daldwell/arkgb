@@ -140,6 +140,10 @@ void RomComponent::Load(const char * rmt)
     FILE *ramFile;
     byte banks;
     
+    // Clear any old names first
+    romName[0] = '\0';
+    ramName[0] = '\0';
+
     strcpy(romName, rmt);
     romFile = getFileHandle(romName,"rb", true);
 
@@ -222,6 +226,8 @@ void RomComponent::Load(const char * rmt)
     byte gbcFlag = romHeader->title[0xF];
     if (gbcFlag == 0x80 || gbcFlag == 0xC0) {
         GUSetProfile(CGB);
+    } else {
+        GUSetProfile(DMG);
     }
 }
 
