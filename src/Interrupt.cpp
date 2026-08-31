@@ -53,9 +53,9 @@ bool InterruptComponent::MemoryMapped(word addr)
 
 void InterruptComponent::Cycle()
 {
-    // If master interrupt register is enabled OR an interrupt is pending, exit halt
+    // If interrupt is pending, exit halt
     // NOTE - interrupts cannot be triggered during a VDMA transfer
-    if (display.GetVdmaStatus() == OFF && (IMERegister || IFRegister)) {
+    if (display.GetVdmaStatus() == OFF && (IERegister & IFRegister)) {
         halt = false;
     }
 

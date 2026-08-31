@@ -1,10 +1,11 @@
 SRC_PATH = src
 OBJ_PATH = obj
-OBJS = $(patsubst $(SRC_PATH)/%.cpp, $(OBJ_PATH)/%.o,$(wildcard $(SRC_PATH)/*.cpp))
+SRC_FILES = $(wildcard $(SRC_PATH)/*.cpp) $(wildcard $(SRC_PATH)/imgui/*.cpp)
+OBJS = $(patsubst $(SRC_PATH)/%.cpp, $(OBJ_PATH)/%.o, $(SRC_FILES))
 VPATH = $(SRC_PATH)
-INC_PATH = -IC:\mingwlib\SDL2-2.0.20\x86_64-w64-mingw32\include\SDL2
-LIB_PATH = -LC:\mingwlib\SDL2-2.0.20\x86_64-w64-mingw32\lib
-CFLAGS = -c -w -Wl,-subsystem,windows
+INC_PATH = -IC:\Games\SDL2-devel-2.30.4-mingw\SDL2-2.30.4\x86_64-w64-mingw32\include\SDL2
+LIB_PATH = -LC:\Games\SDL2-devel-2.30.4-mingw\SDL2-2.30.4\x86_64-w64-mingw32\lib
+CFLAGS = -O3 -c -w -Wl,-subsystem,windows
 LFLAGS = -lmingw32 -lSDL2main  -lSDL2 
 CC = x86_64-w64-mingw32-g++
 

@@ -285,8 +285,9 @@ void DisplayComponent::DrawBackgroundRow(byte y)
     }
 
     // Exit if window/background not enabled
-    if (!(lcdRegs.LCDC & LCDC_BG_WINDOW_ENABLE_MASK)) return;
-
+    // For CGB profile doesn't disable the background but gives unconditional priority to sprite
+    if (!cgbProfile && !(lcdRegs.LCDC & LCDC_BG_WINDOW_ENABLE_MASK)) { return; } 
+    
     int x = 0;
     while (x < 160) {
         // Are we drawing the window?
@@ -294,11 +295,13 @@ void DisplayComponent::DrawBackgroundRow(byte y)
 
         // Configure bg/window values
         if (windowTileRow) {
+            if (!drawWin) { return; }   // Skip drawing if debugger UI is unchecked
             tileX = ( (x-(lcdRegs.WX-0x7))/8 ) & 0x1F;
             tileY = (y-lcdRegs.WY) & 0xFF;
             tileMapAddr = (lcdRegs.LCDC & LCDC_WINDOW_TILE_MAP_MASK) ? 0x9C00 : 0x9800;
             startingXPixel = 0;
         } else {
+            if (!drawBg) { return; }   // Skip drawing if debugger UI is unchecked
             tileX = ((lcdRegs.SCX + x)/8) & 0x1F;
             tileY = (lcdRegs.SCY + y) & 0xFF;
             tileMapAddr = (lcdRegs.LCDC & LCDC_BG_TILE_MAP_MASK) ? 0x9C00 : 0x9800;
@@ -386,6 +389,11 @@ void DisplayComponent::DrawSpritesRow(byte y)
         sprBuffer[i].priority = 0xFFF;
         sprBuffer[i].BGWinOverOAM = false;
     }
+
+    // Exit if sprites not enabled
+    // Either through the registers or the debugging UI override
+    if (!(lcdRegs.LCDC & LCDC_SPRITE_ENABLE_MASK)) { return; }
+    if (!drawOam) { return; }
 
     // Scan the OAM table for sprites on this scanline
     // This roughly emulates the hardware OAM scan method and the OAM FIFO queue pushing
@@ -475,9 +483,12 @@ void DisplayComponent::RenderScanLine(byte y)
 
         Pixel bgPixel = bgWinBuffer[i];
         Pixel oamPixel = sprBuffer[i];
+        bool cgbProfile = (profile == CGB);
+        bool cgbSpritePriorty = cgbProfile && !(lcdRegs.LCDC & LCDC_BG_WINDOW_ENABLE_MASK);
+        bool backgroundPriority = !cgbSpritePriorty && (bgPixel.BGWinOverOAM || oamPixel.BGWinOverOAM);
 
         //Resolve sprite vs background pixel priority
-        if ( oamPixel.cIdx != 0 && ( bgPixel.cIdx == 0 || ( !bgPixel.BGWinOverOAM && !oamPixel.BGWinOverOAM ) ) ) {
+        if ( oamPixel.cIdx != 0 && ( bgPixel.cIdx == 0 || !backgroundPriority ) ) {
             color = GetColorFromPalette(oamPixel.rgb);
         } else {
             color = GetColorFromPalette(bgPixel.rgb);
