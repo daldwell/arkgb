@@ -59,7 +59,7 @@ void InterruptComponent::Cycle()
         halt = false;
     }
 
-    if (IMERegister && IERegister && IFRegister) {
+    if ((display.GetVdmaStatus() == OFF) && IMERegister && IERegister && IFRegister) {
         byte fired = IERegister & IFRegister;
 
         // Vblank interrupt

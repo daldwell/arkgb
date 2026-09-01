@@ -85,7 +85,6 @@ void DisplayComponent::EventHandler(SDL_Event * e)
 
 byte DisplayComponent::PeekByte(word addr) 
 {
-
     switch(addr)
     {
         case 0xFF51:
@@ -114,22 +113,28 @@ byte DisplayComponent::PeekByte(word addr)
 
     // CGB background color index
     if (addr == 0xFF68) {
-        return (cgbBGIncrement << 7) + cgbBGIndex;
+        return (cgbBGIncrement ? 0x80 : 0x00) | 0x40 | (cgbBGIndex & 0x3F);
     }
 
     // CGB background color palette read
     if (addr == 0xFF69) {
-        return cgbBGPal[cgbBGIndex];
+        // Bits 0-5: Index
+        // Bit 6: Must ALWAYS be 1 on real hardware
+        // Bit 7: Increment flag shifted up
+        return cgbBGPal[cgbBGIndex & 0x3F];
     }
 
     // CGB sprite color index
     if (addr == 0xFF6A) {
-        return (cgbOAMIncrement << 7) + cgbOAMIndex;
+        return (cgbOAMIncrement ? 0x80 : 0x00) | 0x40 | (cgbOAMIndex & 0x3F);
     }
 
     // CGB sprite color palette read
     if (addr == 0xFF6B) {
-        return cgbOAMPal[cgbOAMIndex];
+        // Bits 0-5: Index
+        // Bit 6: Must ALWAYS be 1 on real hardware
+        // Bit 7: Increment flag shifted up
+        return cgbOAMPal[cgbOAMIndex & 0x3F];
     }
 
     // VRam
@@ -145,7 +150,6 @@ byte DisplayComponent::PeekByte(word addr)
 
 void DisplayComponent::PokeByte(word addr, byte value)
 {
-
     switch(addr)
     {
         case 0xFF51:
@@ -165,25 +169,24 @@ void DisplayComponent::PokeByte(word addr, byte value)
             vdmaRegs.dst = (vdmaRegs.dst&0x1F00) + (value&0xF0);
             return;
         case 0xFF55:
-            // Commence HDMA transfer
-            vdmaRegs.init = value&0x7f; // Store lower bits, higher bit is used to check DMA type, then discarded
-
             // Stop/restart HDMA transfer if active
-            if (vdmaRegs.status == HBL || vdmaRegs.status == HPS) {
-                if (! (value&0x80) ) {
-                    vdmaRegs.init |= 0x80; // Stop copy
-                    vdmaRegs.status = OFF;
-                }
+            // Only for HDMA. General DMA continues until fully complete
+            if (! (value&0x80) && (vdmaRegs.status == HBL || vdmaRegs.status == HPS)) {
+                vdmaRegs.init |= 0x80; // Stop copy
+                vdmaRegs.status = OFF;
                 return;
             }
 
+            // Commence HDMA transfer
+            vdmaRegs.init = value&0x7f; // Store lower bits, higher bit is used to check DMA type, then discarded
+            vdmaRegs.count = 0;
+
             // Check high bit to enable General/Hblank DMA
             if (value&0x80) {
-                vdmaRegs.status = ( (lcdRegs.STAT & 0x3) == MODE0_HBLANK ) ? HBL : HPS; // Start off paused, will awaken before next Hblank
+                vdmaRegs.status = HPS; // Start off paused, will awaken before next Hblank
             } else {
                 vdmaRegs.status = GEN;
             }
-
             return;
     }
 
@@ -201,7 +204,8 @@ void DisplayComponent::PokeByte(word addr, byte value)
 
     // CGB background color palette write
     if (addr == 0xFF69) {
-        cgbBGPal[cgbBGIncrement ? cgbBGIndex++ : cgbBGIndex] = value;
+        cgbBGPal[cgbBGIndex] = value;
+        if (cgbBGIncrement) { cgbBGIndex = (cgbBGIndex + 1) & 0x3F; }
         return;
     }
 
@@ -214,7 +218,8 @@ void DisplayComponent::PokeByte(word addr, byte value)
 
     // CGB sprite color palette write
     if (addr == 0xFF6B) {
-        cgbOAMPal[cgbOAMIncrement ? cgbOAMIndex++ : cgbOAMIndex] = value;
+        cgbOAMPal[cgbOAMIndex] = value;
+        if (cgbOAMIncrement) { cgbOAMIndex = (cgbOAMIndex + 1) & 0x3F; }
         return;
     }
 
@@ -237,15 +242,19 @@ void DisplayComponent::PokeByte(word addr, byte value)
     }
 
     // Clear screen if ppu is disabled
-    if (addr == 0xFF40 && !(value&LCDC_PPU_ENABLE_MASK)) {
+    if (addr == 0xFF40 ) {
+        if (!(value&LCDC_PPU_ENABLE_MASK)) {
+            // Clear LCD status registers
+            lcdRegs.LCDC = 0x00; 
+            lcdRegs.STAT &= 0xFC;
+            lcdRegs.LY = 0x00;
 
-        // Clear LCD status registers
-        lcdRegs.LCDC = 0x00; 
-        lcdRegs.STAT &= 0xFC;
-        lcdRegs.LY = 0x00;
-
-        // Refresh screen
-        frameReady += 1;
+            // Refresh screen
+            frameReady += 1;
+        } else if (!(lcdRegs.LCDC&LCDC_PPU_ENABLE_MASK)) {
+            // blank the current frame before redrawing
+            blankFrame = true;
+        }
     }
 
     *((byte*)&lcdRegs + (addr&0xF)) = value;
@@ -500,6 +509,12 @@ void DisplayComponent::RenderScanLine(byte y)
 
 void DisplayComponent::PerformVDMA()
 {
+    // Skip if not active, or HDMA has paused for the HBlank period
+    if (vdmaRegs.status == OFF || vdmaRegs.status == HPS) {
+        return;
+    }
+    halt = true; // CPU is halted for duration of transfer
+
     // We do this every other cycle for doublespeed mode as VDMA is tied to the base clock rate
     vdmaRegs.cycles += (4 >> doubleSpeed);
     if (vdmaRegs.cycles != 4) {
@@ -507,43 +522,33 @@ void DisplayComponent::PerformVDMA()
     }
     vdmaRegs.cycles = 0;
     
-    // Skip if not active, or HDMA has paused for the HBlank period
-    if (vdmaRegs.status == OFF || vdmaRegs.status == HPS) {
-        return;
-    }
-
-    halt = true; // CPU is halted for duration of transfer
-
-    mmu.PokeByte((vdmaRegs.dst+0x8000) + (vdmaRegs.count), mmu.PeekByte(vdmaRegs.src + (vdmaRegs.count)));
+    // Two bytes per M cycle (4 cycles) so shift a word value
+    word dest = ((vdmaRegs.dst + vdmaRegs.count) & 0x1FFF) +0x8000;
+    mmu.PokeWord(dest, mmu.PeekWord(vdmaRegs.src + (vdmaRegs.count)));
 
     // Increment the count, do not make further adjustments until 16 bytes have been transferred.
-    vdmaRegs.count++;
+    vdmaRegs.count += 2;
+
     if (vdmaRegs.count % 0x10) {
         return;
     } 
 
-    // No more bytes left - VDMA Transfer complete
-    if (vdmaRegs.init == 0) {
+    // Adjust counts if we are still going
+    // Decrement master count
+    vdmaRegs.init--;
+
+    // If init has under flowed, no more bytes left - VDMA Transfer complete
+    if (vdmaRegs.init == 0xFF) {
         vdmaRegs.status = OFF;
+        halt = false;
+        vdmaRegs.count = 0;
+        return;
     }
 
-    // Adjust counts if we are still going
-    if (vdmaRegs.status != OFF) {
-
-        // Decrement master count
-        vdmaRegs.init--;
-
-        // Pause hdma - only 16 bytes are transferred during a single hblank period
-        if (vdmaRegs.status == HBL) {
-            halt = false;
-            vdmaRegs.status = HPS;
-        }
-
-    } else {
-        // All done, reset VDMA values
+    // Pause hdma - only 16 bytes are transferred during a single hblank period
+    if (vdmaRegs.status == HBL) {
         halt = false;
-        vdmaRegs.init = 0xFF;
-        vdmaRegs.count = 0;
+        vdmaRegs.status = HPS;
     }
 }
 
@@ -584,8 +589,6 @@ void DisplayComponent::Cycle()
             //TODO: enums and define mode flag masks
             case MODE0_HBLANK:
                 modeCycles = MODE0_CYCLES << doubleSpeed;
-                // Execute HDMA cycle here if flag is enabled
-                //PerformVDMA();
 
                 if (displayCycles >= modeCycles) {
                     displayCycles -= modeCycles;
@@ -598,6 +601,8 @@ void DisplayComponent::Cycle()
 
                         // Ready to draw a frame
                         frameReady += 1;
+                        // Turn off blank flag frame if it was on
+                        if (blankFrame) { blankFrame = false; }
 
                         // Turn on vblank mode and enable vblank interrupt
                         lcdRegs.STAT &= ~(MODE3_DRAW);
@@ -644,9 +649,13 @@ void DisplayComponent::Cycle()
                     // This is interleaved with another process that pops pixels from both FIFO queues for rendering when certain conditions are met, ensuring that the FIFO queues are kept in sync and do not overflow
                     // ArkGB builds the background and sprite FIFO queues separately for the entire scanline, and "pops" them together in one hit with the same pixel priority rules as the hardware. So essentially a scanline sized FIFO queue.
                     // As the real timing of the FIFO queue is not emulated, some of the more nuanced aspects of the display aren't emulated here i.e. sprite fetch cancellation occuring mid scan line when a game switches off the sprite flag
-                    DrawBackgroundRow(lcdRegs.LY);
-                    DrawSpritesRow(lcdRegs.LY);
-                    RenderScanLine(lcdRegs.LY);
+                    
+                    // If we aren't blanking the current frame (i.e. re-enabling display mid-frame)
+                    if (!blankFrame) {
+                        DrawBackgroundRow(lcdRegs.LY);
+                        DrawSpritesRow(lcdRegs.LY);
+                        RenderScanLine(lcdRegs.LY);
+                    }
 
                     displayCycles -= modeCycles;
                     lcdRegs.STAT &= ~(MODE3_DRAW);
@@ -679,11 +688,6 @@ void DisplayComponent::Cycle()
                         // Check if we can enable OAM interrupt 
                         if (lcdRegs.STAT & STAT_MODE2) {
                             IFRegister |= lcd_flag;
-                        }
-
-                        // Enable HDMA if flag is paused
-                        if (vdmaRegs.status == HPS) {
-                            vdmaRegs.status = HBL;
                         }
 
                         break;
@@ -779,6 +783,14 @@ void DisplayComponent::Reset()
     vdmaRegs.init = 0xFF;
     vdmaRegs.status = OFF;
     vdmaRegs.count = 0;
+
+    // cgb regs
+    cgbBGIncrement = false;
+    cgbBGIndex = 0;
+
+    // CGB sprite palette byte array
+    cgbOAMIncrement = false;
+    cgbOAMIndex = 0;
 }
 
 VdmaStatus DisplayComponent::GetVdmaStatus()
