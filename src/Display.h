@@ -74,6 +74,7 @@ class DisplayComponent : public GComponent
         void Reset() override;
         VdmaStatus GetVdmaStatus();
         int frameReady = 0;
+        bool blankFrame = false;
         LcdRegister lcdRegs;
         bool drawOam = true;
         bool drawBg = true;
