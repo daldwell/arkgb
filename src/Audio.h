@@ -8,7 +8,6 @@ extern SDL_AudioDeviceID audio_device_id;
 #define RING_BUF_SIZE 16384
 extern std::atomic<int> bufferReadCursor;
 extern std::atomic<int> bufferWriteCursor;
-extern int samplesWrittenThisFrame;
 extern int speedFactor;
 
 // Channel variables

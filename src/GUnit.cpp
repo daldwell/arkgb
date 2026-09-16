@@ -35,18 +35,17 @@ void GUCycle()
         audio.Cycle();
         display.Cycle();
 
-        if (display.frameReady >= speedFactor) {
-            gwindow.RefreshWindow();
-            gwindow.ClearSurface();
+        if (display.frameReady >= 1 && display.frameReady > speedFactor) {
+            // If speed is negative we duplicate the frame to slow things down
+            int c = (speedFactor < 0) ? (speedFactor*-1)+1 : 1;
+            for (int i = 0; i < c; i++) {
+                gwindow.RefreshWindow();
+            }
             display.frameReady = 0;
-        
-            // RESET FOR NEXT FRAME
-            samplesWrittenThisFrame = 0;
-        }
+        }  
     } else {
         // Just render the GUI
         gwindow.RefreshWindow();
-        gwindow.ClearSurface();    
     }
 }
 
@@ -73,6 +72,7 @@ void GUSetProfile(Profile profile)
 
 void GUDispatchEvent(SDL_Event * e)
 {
+    display.EventHandler(e);
     audio.EventHandler(e);
     control.EventHandler(e);
 }
