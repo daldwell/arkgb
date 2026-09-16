@@ -55,11 +55,11 @@ void InterruptComponent::Cycle()
 {
     // If interrupt is pending, exit halt
     // NOTE - interrupts cannot be triggered during a VDMA transfer
-    if (display.GetVdmaStatus() == OFF && (IERegister & IFRegister)) {
+    if ((display.GetVdmaStatus() == OFF || display.GetVdmaStatus() == HPS) && (IERegister & IFRegister)) {
         halt = false;
     }
 
-    if ((display.GetVdmaStatus() == OFF) && IMERegister && IERegister && IFRegister) {
+    if ((display.GetVdmaStatus() == OFF || display.GetVdmaStatus() == HPS) && IMERegister && IERegister && IFRegister) {
         byte fired = IERegister & IFRegister;
 
         // Vblank interrupt

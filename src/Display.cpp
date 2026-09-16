@@ -58,6 +58,7 @@ Pixel bgWinBuffer[160];
 Pixel sprBuffer[160];
 int dmaCounter = 160;
 bool lycEnable;
+int windowLineCounter = 0;
 
 // DMG palette (this is hardcoded)
 RGB dmgPal[4] = {
@@ -284,6 +285,7 @@ void DisplayComponent::DrawBackgroundRow(byte y)
     byte palIndex;
     word palData;
     int startingXPixel;
+    bool updateWTC = false; // Update window tile row
 
     // Init background row buffer
     for (int i = 0; i < 160; i++) {
@@ -306,9 +308,10 @@ void DisplayComponent::DrawBackgroundRow(byte y)
         if (windowTileRow) {
             if (!drawWin) { return; }   // Skip drawing if debugger UI is unchecked
             tileX = ( (x-(lcdRegs.WX-0x7))/8 ) & 0x1F;
-            tileY = (y-lcdRegs.WY) & 0xFF;
+            tileY = (windowLineCounter) & 0xFF;
             tileMapAddr = (lcdRegs.LCDC & LCDC_WINDOW_TILE_MAP_MASK) ? 0x9C00 : 0x9800;
             startingXPixel = 0;
+            updateWTC = true;
         } else {
             if (!drawBg) { return; }   // Skip drawing if debugger UI is unchecked
             tileX = ((lcdRegs.SCX + x)/8) & 0x1F;
@@ -372,6 +375,9 @@ void DisplayComponent::DrawBackgroundRow(byte y)
                 break;
         }
     }
+
+    // If the window was active for this line update the line counter
+    if (updateWTC) { windowLineCounter++;}
 }
 
 void DisplayComponent::DrawSpritesRow(byte y)
@@ -700,6 +706,7 @@ void DisplayComponent::Cycle()
                         lcdRegs.LY = 0;
                         if (lcdRegs.LY == lcdRegs.LYC)
                         lycEnable = true;
+                        windowLineCounter = 0;
                     }
                 }
 

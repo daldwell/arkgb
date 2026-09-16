@@ -13,14 +13,13 @@
 double audioCycles;
 struct AudioRegisters audioRegs;
 SDL_AudioDeviceID audio_device_id;
-int samplesWrittenThisFrame = 0;
 
 // Audio buffer data
 #define RING_BUF_SIZE 16384
 float mixData[RING_BUF_SIZE];
 std::atomic<int> bufferReadCursor{0};
 std::atomic<int> bufferWriteCursor{0};
-int speedFactor = 1;
+int speedFactor = 0;
 
 byte dutyWaveTable[4]
 {
@@ -52,10 +51,17 @@ void AudioComponent::EventHandler(SDL_Event * e)
         switch (e->key.keysym.sym)
         {
             case SDLK_KP_PLUS:
-                speedFactor += 2;
+                speedFactor += 1;
                 break;
             case SDLK_KP_MINUS:
-                speedFactor = 1;
+                speedFactor -= 1;
+                break;
+            case SDLK_KP_ENTER:
+                speedFactor = 0;
+                break;
+            case SDLK_KP_0:
+                cpuRunning = !cpuRunning;
+                speedFactor = 0;
                 break;
             default:
                 break;
@@ -719,8 +725,6 @@ void AudioComponent::Cycle()
             mixData[nextWrite]    = rightAccum;
 
             bufferWriteCursor.store(nextWrite2, std::memory_order_release);
-
-            samplesWrittenThisFrame++;
         } else {
             // Safe Overflow Catch
             break; // If buffer is completely full, break to avoid infinite loop
